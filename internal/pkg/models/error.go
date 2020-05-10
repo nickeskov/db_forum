@@ -25,4 +25,5 @@ var (
 	ErrConflict     = NewError("entity conflicts with other entity")
 	ErrAccessDenied = NewError("access to entity denied")
 	ErrValidation   = NewError("entity validation failed")
+	ErrBadForeign   = NewError("entity have bad foreign relation")
 )

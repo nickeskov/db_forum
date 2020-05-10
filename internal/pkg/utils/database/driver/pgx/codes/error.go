@@ -6,6 +6,7 @@ import (
 )
 
 var (
+	ErrCodeNotNull    = "23502"
 	ErrCodeForeignKey = "23503"
 	ErrCodeUnique     = "23505"
 )
