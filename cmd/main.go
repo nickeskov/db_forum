@@ -1,9 +1,9 @@
 package main
 
 import (
-	"fmt"
+	"github.com/nickeskov/db_forum/internal/app/db_forum"
 )
 
 func main() {
-	fmt.Println("Hello World!")
+	db_forum.StartNew()
 }
