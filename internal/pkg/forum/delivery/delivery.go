@@ -6,7 +6,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/nickeskov/db_forum/internal/pkg/forum"
 	"github.com/nickeskov/db_forum/internal/pkg/models"
-	httpUtils "github.com/nickeskov/db_forum/internal/pkg/utils/http"
+	httpUtils "github.com/nickeskov/db_forum/pkg/http"
 	"github.com/nickeskov/db_forum/pkg/logger"
 	"io"
 	"io/ioutil"
@@ -15,27 +15,13 @@ import (
 
 type Delivery struct {
 	useCase forum.UseCase
-	logger  logger.Logger
+	utils   httpUtils.Utils
 }
 
 func NewDelivery(useCase forum.UseCase, logger logger.Logger) Delivery {
 	return Delivery{
 		useCase: useCase,
-		logger:  logger,
-	}
-}
-
-func (delivery Delivery) writeResponseError(w http.ResponseWriter, r *http.Request, code int, msg string) {
-	err := httpUtils.WriteResponseError(w, code, msg)
-	if err != nil {
-		delivery.logger.HttpLogCallerError(r.Context(), err, err)
-	}
-}
-
-func (delivery Delivery) writeResponse(w http.ResponseWriter, r *http.Request, code int, data []byte) {
-	err := httpUtils.WriteResponse(w, code, data)
-	if err != nil {
-		delivery.logger.HttpLogCallerError(r.Context(), err, err)
+		utils:   httpUtils.NewDeliveryUtils(logger),
 	}
 }
 
@@ -43,20 +29,20 @@ func (delivery Delivery) CreateForum(w http.ResponseWriter, r *http.Request) {
 	data, err := ioutil.ReadAll(r.Body)
 	switch {
 	case err == io.EOF:
-		delivery.writeResponseError(w, r, http.StatusBadRequest, "empty body")
+		delivery.utils.WriteResponseError(w, r, http.StatusBadRequest, "empty body")
 	case err != nil:
-		delivery.writeResponseError(w, r, http.StatusInternalServerError, err.Error())
+		delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError, err.Error())
 	}
 
 	var newForum models.Forum
 
 	if err := json.Unmarshal(data, &newForum); err != nil {
-		delivery.writeResponseError(w, r, http.StatusBadRequest, err.Error())
+		delivery.utils.WriteResponseError(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	if validationErr := newForum.Validate(); validationErr != nil {
-		delivery.writeResponseError(w, r, http.StatusBadRequest, validationErr.Error())
+		delivery.utils.WriteResponseError(w, r, http.StatusBadRequest, validationErr.Error())
 		return
 	}
 
@@ -65,33 +51,33 @@ func (delivery Delivery) CreateForum(w http.ResponseWriter, r *http.Request) {
 	case models.ErrConflict:
 		existingForum, err := delivery.useCase.GetBySlug(newForum.Slug)
 		if err != nil {
-			delivery.writeResponseError(w, r, http.StatusInternalServerError, err.Error())
+			delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError, err.Error())
 			return
 		}
 
 		data, err := json.Marshal(existingForum)
 		if err != nil {
-			delivery.writeResponseError(w, r, http.StatusInternalServerError, err.Error())
+			delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError, err.Error())
 			return
 		}
 
-		delivery.writeResponse(w, r, http.StatusConflict, data)
+		delivery.utils.WriteResponse(w, r, http.StatusConflict, data)
 
 	case models.ErrBadForeign:
-		delivery.writeResponseError(w, r, http.StatusNotFound,
+		delivery.utils.WriteResponseError(w, r, http.StatusNotFound,
 			fmt.Sprintf("cannot create forum, user with nickname=%s does not exits", newForum.User))
 
 	case nil:
 		data, err := json.Marshal(createdForum)
 		if err != nil {
-			delivery.writeResponseError(w, r, http.StatusInternalServerError, err.Error())
+			delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError, err.Error())
 			return
 		}
 
-		delivery.writeResponse(w, r, http.StatusCreated, data)
+		delivery.utils.WriteResponse(w, r, http.StatusCreated, data)
 
 	default:
-		delivery.writeResponseError(w, r, http.StatusInternalServerError, err.Error())
+		delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError, err.Error())
 	}
 
 }
@@ -102,18 +88,18 @@ func (delivery Delivery) GetForumDetails(w http.ResponseWriter, r *http.Request)
 	existingForum, err := delivery.useCase.GetBySlug(slug)
 	switch err {
 	case models.ErrDoesNotExist:
-		delivery.writeResponseError(w, r, http.StatusNotFound,
+		delivery.utils.WriteResponseError(w, r, http.StatusNotFound,
 			fmt.Sprintf("forum with slug=%s does not exits", slug))
 	case nil:
 		data, err := json.Marshal(existingForum)
 		if err != nil {
-			delivery.writeResponseError(w, r, http.StatusInternalServerError, err.Error())
+			delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError, err.Error())
 			return
 		}
 
-		delivery.writeResponse(w, r, http.StatusOK, data)
+		delivery.utils.WriteResponse(w, r, http.StatusOK, data)
 	default:
-		delivery.writeResponseError(w, r, http.StatusInternalServerError, err.Error())
+		delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError, err.Error())
 	}
 }
 
@@ -137,23 +123,23 @@ func (delivery Delivery) GetForumUsers(w http.ResponseWriter, r *http.Request) {
 	users, err := delivery.useCase.GetForumUsersBySlug(slug, sinceNickname, desc, limit)
 	switch err {
 	case models.ErrDoesNotExist:
-		delivery.writeResponseError(w, r, http.StatusInternalServerError,
+		delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError,
 			fmt.Sprintf("forum with slug=%s does not exist", slug))
 
 	case models.ErrInvalid:
-		delivery.writeResponseError(w, r, http.StatusInternalServerError,
+		delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError,
 			fmt.Sprintf("forum with slug=%s does not exist", slug))
 
 	case nil:
 		data, err := json.Marshal(users)
 		if err != nil {
-			delivery.writeResponseError(w, r, http.StatusInternalServerError, err.Error())
+			delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError, err.Error())
 			return
 		}
 
-		delivery.writeResponse(w, r, http.StatusOK, data)
+		delivery.utils.WriteResponse(w, r, http.StatusOK, data)
 
 	default:
-		delivery.writeResponseError(w, r, http.StatusInternalServerError, err.Error())
+		delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError, err.Error())
 	}
 }

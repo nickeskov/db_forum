@@ -1,0 +1,14 @@
+name: checks
+
+on:
+  push:
+    branches: [ master, dev ]
+jobs:
+  linter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v1
+        with:
+          version: v1.27

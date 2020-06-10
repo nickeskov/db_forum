@@ -8,7 +8,7 @@ type Thread struct {
 	Title   string    `json:"title"`
 	Message string    `json:"message"`
 	ID      int32     `json:"id,omitempty"`
-	Forum   string    `json:"forum, omitempty"`
+	Forum   string    `json:"forum,omitempty"`
 	Created time.Time `json:"created,omitempty"`
 	Slug    string    `json:"slug,omitempty"`
 	Votes   int32     `json:"votes,omitempty"`
