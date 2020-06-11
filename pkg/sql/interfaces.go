@@ -15,3 +15,8 @@ type ExecQueryer interface {
 	Executer
 	Querier
 }
+
+type Transactioner interface {
+	Commit() error
+	Rollback() error
+}

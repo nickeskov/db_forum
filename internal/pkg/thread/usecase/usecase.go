@@ -30,6 +30,16 @@ func (useCase UseCase) Create(thread models.Thread) (models.Thread, error) {
 	return useCase.repo.Create(thread)
 }
 
+func (useCase UseCase) UpdateBySlugOrID(slugOrID string, thread models.Thread) (models.Thread, error) {
+	if id, err := strconv.Atoi(slugOrID); err != nil {
+		thread.Slug = slugOrID
+		return useCase.repo.UpdateBySlug(thread)
+	} else {
+		thread.ID = int32(id)
+		return useCase.repo.UpdateByID(thread)
+	}
+}
+
 func (useCase UseCase) GetThreadsByForumSlug(forumSlug, since, desc, limit string) (models.Threads, error) {
 	limitInt, err := strconv.Atoi(limit)
 	if err != nil {

@@ -127,6 +127,70 @@ func (repo Repository) Create(thread models.Thread) (models.Thread, error) {
 	return thread, errors.WithStack(err)
 }
 
+func (repo Repository) UpdateByID(thread models.Thread) (models.Thread, error) {
+	err := repo.db.QueryRow(`
+			UPDATE threads
+			SET title   = COALESCE(NULLIF($2, ''), title),
+				message = COALESCE(NULLIF($3, ''), message)
+			WHERE id = $1
+			RETURNING id, slug, forum_slug, author_nickname, title, message, votes, created`,
+		thread.ID,
+		thread.Title,
+		thread.Message,
+	).Scan(
+		&thread.ID,
+		&thread.Slug,
+		&thread.Forum,
+		&thread.Author,
+		&thread.Title,
+		&thread.Message,
+		&thread.Votes,
+		&thread.Created,
+	)
+
+	switch {
+	case err == pgx.ErrNoRows:
+		return models.Thread{}, models.ErrDoesNotExist
+	case err != nil:
+		return models.Thread{}, errors.Wrapf(err,
+			"some error in thread repo in UpdateByID with thread=%+v", thread)
+	}
+
+	return thread, nil
+}
+
+func (repo Repository) UpdateBySlug(thread models.Thread) (models.Thread, error) {
+	err := repo.db.QueryRow(`
+			UPDATE threads
+			SET title   = COALESCE(NULLIF($2, ''), title),
+				message = COALESCE(NULLIF($3, ''), message)
+			WHERE slug = $1
+			RETURNING id, slug, forum_slug, author_nickname, title, message, votes, created`,
+		thread.Slug,
+		thread.Title,
+		thread.Message,
+	).Scan(
+		&thread.ID,
+		&thread.Slug,
+		&thread.Forum,
+		&thread.Author,
+		&thread.Title,
+		&thread.Message,
+		&thread.Votes,
+		&thread.Created,
+	)
+
+	switch {
+	case err == pgx.ErrNoRows:
+		return models.Thread{}, models.ErrDoesNotExist
+	case err != nil:
+		return models.Thread{}, errors.Wrapf(err,
+			"some error in thread repo in UpdateBySlug with thread=%+v", thread)
+	}
+
+	return thread, nil
+}
+
 func (repo Repository) GetThreadsByForumSlug(forumSlug string, since *time.Time, desc bool, limit int32) (models.Threads, error) {
 	var rows *pgx.Rows
 	var err error

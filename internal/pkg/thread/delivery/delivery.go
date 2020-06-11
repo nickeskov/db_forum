@@ -116,3 +116,66 @@ func (delivery Delivery) GetThreadsByForumSlug(w http.ResponseWriter, r *http.Re
 		delivery.utils.WriteResponse(w, r, http.StatusOK, data)
 	}
 }
+
+func (delivery Delivery) GetThreadBySlugOrID(w http.ResponseWriter, r *http.Request) {
+	slugOrID := mux.Vars(r)["slug_or_id"]
+
+	threads, err := delivery.useCase.GetBySlugOrID(slugOrID)
+	switch {
+	case errors.Is(err, models.ErrDoesNotExist):
+		delivery.utils.WriteResponseError(w, r, http.StatusNotFound,
+			fmt.Sprintf("thread with slug_or_id=%s does not exits", slugOrID))
+
+	case err != nil:
+		delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError,
+			fmt.Sprintf("%+v", err))
+
+	default:
+		data, err := json.Marshal(threads)
+		if err != nil {
+			delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		delivery.utils.WriteResponse(w, r, http.StatusOK, data)
+	}
+}
+
+func (delivery Delivery) UpdateThreadBySlugOrID(w http.ResponseWriter, r *http.Request) {
+	data, err := ioutil.ReadAll(r.Body)
+	switch {
+	case err == io.EOF:
+		delivery.utils.WriteResponseError(w, r, http.StatusBadRequest, "empty body")
+	case err != nil:
+		delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError, err.Error())
+	}
+
+	var threadUpdate models.Thread
+
+	if err := json.Unmarshal(data, &threadUpdate); err != nil {
+		delivery.utils.WriteResponseError(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	slugOrID := mux.Vars(r)["slug_or_id"]
+
+	updatedThread, err := delivery.useCase.UpdateBySlugOrID(slugOrID, threadUpdate)
+	switch {
+	case errors.Is(err, models.ErrDoesNotExist):
+		delivery.utils.WriteResponseError(w, r, http.StatusNotFound,
+			fmt.Sprintf("thread with slug_or_id=%s does not exits", slugOrID))
+
+	case err != nil:
+		delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError,
+			fmt.Sprintf("%+v", err))
+
+	default:
+		data, err := json.Marshal(updatedThread)
+		if err != nil {
+			delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		delivery.utils.WriteResponse(w, r, http.StatusOK, data)
+	}
+}

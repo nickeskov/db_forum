@@ -43,7 +43,7 @@ CREATE UNLOGGED TABLE IF NOT EXISTS forums_users_nicknames
 CREATE VIEW forums_users AS
 SELECT fu_nicknames.forum_slug, u.nickname, u.email, u.fullname, u.about
 FROM forums_users_nicknames AS fu_nicknames
-         JOIN users AS u on fu_nicknames.user_nickname = u.nickname;
+         JOIN users AS u ON fu_nicknames.user_nickname = u.nickname;
 
 CREATE UNLOGGED TABLE IF NOT EXISTS threads
 (

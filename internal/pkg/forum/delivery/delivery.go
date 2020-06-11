@@ -6,6 +6,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/nickeskov/db_forum/internal/pkg/forum"
 	"github.com/nickeskov/db_forum/internal/pkg/models"
+	"github.com/nickeskov/db_forum/internal/pkg/utils"
 	httpUtils "github.com/nickeskov/db_forum/pkg/http"
 	"github.com/nickeskov/db_forum/pkg/logger"
 	"io"
@@ -65,7 +66,8 @@ func (delivery Delivery) CreateForum(w http.ResponseWriter, r *http.Request) {
 
 	case models.ErrBadForeign:
 		delivery.utils.WriteResponseError(w, r, http.StatusNotFound,
-			fmt.Sprintf("cannot create forum, user with nickname=%s does not exits", newForum.User))
+			fmt.Sprintf("cannot create forum, user with nickname=%s does not exits",
+				newForum.User))
 
 	case nil:
 		data, err := json.Marshal(createdForum)
@@ -90,6 +92,7 @@ func (delivery Delivery) GetForumDetails(w http.ResponseWriter, r *http.Request)
 	case models.ErrDoesNotExist:
 		delivery.utils.WriteResponseError(w, r, http.StatusNotFound,
 			fmt.Sprintf("forum with slug=%s does not exits", slug))
+
 	case nil:
 		data, err := json.Marshal(existingForum)
 		if err != nil {
@@ -98,6 +101,7 @@ func (delivery Delivery) GetForumDetails(w http.ResponseWriter, r *http.Request)
 		}
 
 		delivery.utils.WriteResponse(w, r, http.StatusOK, data)
+
 	default:
 		delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError, err.Error())
 	}
@@ -106,29 +110,16 @@ func (delivery Delivery) GetForumDetails(w http.ResponseWriter, r *http.Request)
 func (delivery Delivery) GetForumUsers(w http.ResponseWriter, r *http.Request) {
 	slug := mux.Vars(r)["slug"]
 
-	urlQuery := r.URL.Query()
-
-	sinceNickname := urlQuery.Get("since")
-
-	var limit string
-	if limit = urlQuery.Get("limit"); limit == "" {
-		limit = "1"
-	}
-
-	var desc string
-	if desc = urlQuery.Get(""); desc == "" {
-		desc = "false"
-	}
+	sinceNickname, desc, limit := utils.ParseSinceDescLimit(r.URL.Query())
 
 	users, err := delivery.useCase.GetForumUsersBySlug(slug, sinceNickname, desc, limit)
 	switch err {
 	case models.ErrDoesNotExist:
-		delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError,
+		delivery.utils.WriteResponseError(w, r, http.StatusNotFound,
 			fmt.Sprintf("forum with slug=%s does not exist", slug))
 
 	case models.ErrInvalid:
-		delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError,
-			fmt.Sprintf("forum with slug=%s does not exist", slug))
+		delivery.utils.WriteResponseError(w, r, http.StatusBadRequest, "bad request")
 
 	case nil:
 		data, err := json.Marshal(users)

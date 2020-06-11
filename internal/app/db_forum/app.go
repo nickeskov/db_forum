@@ -5,6 +5,9 @@ import (
 	forumDelivery "github.com/nickeskov/db_forum/internal/pkg/forum/delivery"
 	forumRepository "github.com/nickeskov/db_forum/internal/pkg/forum/repository"
 	forumUseCase "github.com/nickeskov/db_forum/internal/pkg/forum/usecase"
+	serviceDelivery "github.com/nickeskov/db_forum/internal/pkg/service/delivery"
+	serviceRepository "github.com/nickeskov/db_forum/internal/pkg/service/repository"
+	serviceUseCase "github.com/nickeskov/db_forum/internal/pkg/service/usecase"
 	threadDelivery "github.com/nickeskov/db_forum/internal/pkg/thread/delivery"
 	threadRepository "github.com/nickeskov/db_forum/internal/pkg/thread/repository"
 	threadUseCase "github.com/nickeskov/db_forum/internal/pkg/thread/usecase"
@@ -38,14 +41,17 @@ func StartNew() {
 	userRepo := userRepository.NewRepository(dbConnPool)
 	forumRepo := forumRepository.NewRepository(dbConnPool)
 	threadRepo := threadRepository.NewRepository(dbConnPool, forumRepo)
+	serviceRepo := serviceRepository.NewRepository(dbConnPool)
 
 	userUC := userUseCase.NewUseCase(userRepo)
 	forumUC := forumUseCase.NewUseCase(forumRepo)
 	threadUC := threadUseCase.NewUseCase(threadRepo)
+	serviceUC := serviceUseCase.NewUseCase(serviceRepo)
 
 	userHandlers := userDelivery.NewDelivery(userUC, customLogger)
 	forumHandlers := forumDelivery.NewDelivery(forumUC, customLogger)
 	threadHandlers := threadDelivery.NewDelivery(threadUC, customLogger)
+	serviceHandlers := serviceDelivery.NewDelivery(serviceUC, customLogger)
 
 	router := mux.NewRouter().PathPrefix("/api").Subrouter()
 	router.Use(middleware.JsonContentTypeMiddleware)
@@ -60,6 +66,21 @@ func StartNew() {
 
 	router.HandleFunc("/forum/{slug}/create", threadHandlers.CreateThread).Methods(http.MethodPost)
 	router.HandleFunc("/forum/{slug}/threads", threadHandlers.GetThreadsByForumSlug).Methods(http.MethodGet)
+
+	router.HandleFunc("/thread/{slug_or_id}/details", threadHandlers.GetThreadBySlugOrID).Methods(http.MethodGet)
+	router.HandleFunc("/thread/{slug_or_id}/details", threadHandlers.UpdateThreadBySlugOrID).Methods(http.MethodPost)
+
+	// TODO(nickeskov): implement me
+	//router.HandleFunc("/thread/{slug_or_id}/posts", nil).Methods(http.MethodGet)
+	//router.HandleFunc("/thread/{slug_or_id}/vote", nil).Methods(http.MethodPost)
+	//router.HandleFunc("/thread/{slug_or_id}/create", nil).Methods(http.MethodPost)
+
+	// TODO(nickeskov): implement me
+	//router.HandleFunc("/post/{id}/details", nil).Methods(http.MethodGet)
+	//router.HandleFunc("/post/{id}/details", nil).Methods(http.MethodPost)
+
+	router.HandleFunc("/service/clear", serviceHandlers.DropAllData).Methods(http.MethodPost)
+	router.HandleFunc("/service/status", serviceHandlers.GetStatus).Methods(http.MethodGet)
 
 	// TODO(nickeskov): hardcoded server address and port
 	if err := http.ListenAndServe(":5000", router); err != nil {
