@@ -5,6 +5,9 @@ import (
 	forumDelivery "github.com/nickeskov/db_forum/internal/pkg/forum/delivery"
 	forumRepository "github.com/nickeskov/db_forum/internal/pkg/forum/repository"
 	forumUseCase "github.com/nickeskov/db_forum/internal/pkg/forum/usecase"
+	threadDelivery "github.com/nickeskov/db_forum/internal/pkg/thread/delivery"
+	threadRepository "github.com/nickeskov/db_forum/internal/pkg/thread/repository"
+	threadUseCase "github.com/nickeskov/db_forum/internal/pkg/thread/usecase"
 	userDelivery "github.com/nickeskov/db_forum/internal/pkg/user/delivery"
 	userRepository "github.com/nickeskov/db_forum/internal/pkg/user/repository"
 	userUseCase "github.com/nickeskov/db_forum/internal/pkg/user/usecase"
@@ -19,7 +22,7 @@ func StartNew() {
 	customLogger := logger.NewTextFormatSimpleLogger(os.Stdout)
 	customLogger.Printf(">>>>>>>>>>>>%v<<<<<<<<<<<<\n", time.Now())
 
-	// TODO(nickeskov): hardcode
+	// TODO(nickeskov): hardcoded database credentials
 	dbConnPool, err := ConnectToDB(
 		"localhost",
 		"my_db_forum",
@@ -34,12 +37,15 @@ func StartNew() {
 
 	userRepo := userRepository.NewRepository(dbConnPool)
 	forumRepo := forumRepository.NewRepository(dbConnPool)
+	threadRepo := threadRepository.NewRepository(dbConnPool, forumRepo)
 
 	userUC := userUseCase.NewUseCase(userRepo)
 	forumUC := forumUseCase.NewUseCase(forumRepo)
+	threadUC := threadUseCase.NewUseCase(threadRepo)
 
 	userHandlers := userDelivery.NewDelivery(userUC, customLogger)
 	forumHandlers := forumDelivery.NewDelivery(forumUC, customLogger)
+	threadHandlers := threadDelivery.NewDelivery(threadUC, customLogger)
 
 	router := mux.NewRouter().PathPrefix("/api").Subrouter()
 	router.Use(middleware.JsonContentTypeMiddleware)
@@ -52,7 +58,10 @@ func StartNew() {
 	router.HandleFunc("/forum/{slug}/details", forumHandlers.GetForumDetails).Methods(http.MethodGet)
 	router.HandleFunc("/forum/{slug}/users", forumHandlers.GetForumUsers).Methods(http.MethodGet)
 
-	// TODO(nickeskov): hardcode
+	router.HandleFunc("/forum/{slug}/create", threadHandlers.CreateThread).Methods(http.MethodPost)
+	router.HandleFunc("/forum/{slug}/threads", threadHandlers.GetThreadsByForumSlug).Methods(http.MethodGet)
+
+	// TODO(nickeskov): hardcoded server address and port
 	if err := http.ListenAndServe(":5000", router); err != nil {
 		customLogger.Fatalln("cannot start service:", err)
 	}

@@ -22,8 +22,7 @@ func (repo Repository) Create(forum models.Forum) (models.Forum, error) {
 		`	INSERT INTO forums (slug, title, threads, posts, owner_nickname)
 				VALUES ($1, $2, $3, $4, (
 							SELECT nickname FROM users WHERE nickname = $5
-				)) RETURNING owner_nickname
-					`,
+				)) RETURNING owner_nickname`,
 		forum.Slug,
 		forum.Title,
 		forum.Threads,
@@ -42,7 +41,7 @@ func (repo Repository) Create(forum models.Forum) (models.Forum, error) {
 		}
 	}
 
-	return forum, err
+	return forum, errors.WithStack(err)
 }
 
 func (repo Repository) GetBySlug(slug string) (models.Forum, error) {
@@ -65,34 +64,10 @@ func (repo Repository) GetBySlug(slug string) (models.Forum, error) {
 		return models.Forum{}, models.ErrDoesNotExist
 
 	case err != nil:
-		return models.Forum{}, err
+		return models.Forum{}, errors.WithStack(err)
 	}
 
 	return forum, nil
-}
-
-var sqlGetForumUser = map[bool]string{
-	true: ` 
-		SELECT nickname,
-			   email,
-			   fullname,
-			   about
-		FROM forums_users
-		WHERE forum_slug = $1
-		  AND nickname < $2
-		ORDER BY nickname DESC
-		LIMIT $3`,
-
-	false: `
-		SELECT nickname,
-			   email,
-			   fullname,
-			   about
-		FROM forums_users
-		WHERE forum_slug = $1
-		  AND nickname > $2
-		ORDER BY nickname
-		LIMIT $3`,
 }
 
 func (repo Repository) GetForumUsersBySlug(slug, sinceNickname string, desc bool, limit int32) (models.Users, error) {

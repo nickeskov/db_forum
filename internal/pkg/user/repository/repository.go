@@ -29,10 +29,10 @@ func (repo Repository) Create(user models.User) error {
 
 	pgxErr := codes.ExtractErrorCode(err)
 	if pgxErr != nil && pgxErr.Error() == codes.ErrCodeUnique {
-		err = models.ErrAlreadyExist
+		return models.ErrAlreadyExist
 	}
 
-	return err
+	return errors.WithStack(err)
 }
 
 func (repo Repository) UpdateByNickname(user models.User) (models.User, error) {
@@ -60,11 +60,12 @@ func (repo Repository) UpdateByNickname(user models.User) (models.User, error) {
 		}
 
 		if pgxErr := codes.ExtractErrorCode(err); pgxErr != nil {
-			err = models.ErrConflict
+			// TODO(nickeskov): check error code
+			return models.User{}, models.ErrConflict
 		}
 	}
 
-	return user, err
+	return user, errors.WithStack(err)
 }
 
 func (repo Repository) GetByNickname(nickname string) (user models.User, err error) {
