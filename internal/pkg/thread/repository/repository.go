@@ -5,6 +5,7 @@ import (
 	"github.com/nickeskov/db_forum/internal/pkg/forum"
 	"github.com/nickeskov/db_forum/internal/pkg/models"
 	"github.com/nickeskov/db_forum/internal/pkg/utils/database/driver/pgx/codes"
+	sqlHelpers "github.com/nickeskov/db_forum/pkg/sql"
 	"github.com/pkg/errors"
 	"time"
 )
@@ -22,66 +23,95 @@ func NewRepository(db *pgx.ConnPool, forumRepo forum.Repository) Repository {
 }
 
 func (repo Repository) GetByID(id int32) (models.Thread, error) {
-	var thread models.Thread
+	return getByID(repo.db, id)
+}
 
-	err := repo.db.QueryRow(`
-			SELECT id,
-				   slug,
-				   forum_slug,
-				   author_nickname,
-				   title,
-				   message,
-				   votes,
-				   created
-			FROM threads
-			WHERE id = $1`,
+func (repo Repository) GetBySlug(slug string) (models.Thread, error) {
+	return getBySlug(repo.db, slug)
+}
+
+func (repo Repository) VoteByID(id int32, vote models.Vote) (thread models.Thread, err error) {
+	tx, err := repo.db.Begin()
+	if err != nil {
+		return models.Thread{}, errors.WithStack(err)
+	}
+	defer func() {
+		err = sqlHelpers.FinishTransaction(tx, err)
+	}()
+
+	_, err = tx.Exec(`
+			INSERT INTO votes (thread_id, author_nickname, voice)
+			VALUES ($1, $2, $3)
+			ON CONFLICT (thread_id, author_nickname) DO UPDATE SET voice = $3`,
 		id,
-	).Scan(
-		&thread.ID,
-		&thread.Slug,
-		&thread.Forum,
-		&thread.Author,
-		&thread.Title,
-		&thread.Message,
-		&thread.Votes,
-		&thread.Created,
+		vote.Nickname,
+		vote.Voice,
 	)
 
-	if err == pgx.ErrNoRows {
-		return models.Thread{}, models.ErrDoesNotExist
+	if pgxErr := codes.ExtractErrorCode(err); pgxErr != nil {
+		switch pgxErr.Error() {
+		case codes.ErrCodeForeignKey:
+			return models.Thread{}, models.ErrDoesNotExist // author or thread does not exist
+		default:
+			return models.Thread{}, errors.Wrapf(err,
+				"some error while voting threadID=%d, vote=%+v", id, vote)
+		}
+	}
+
+	if thread, err = getByID(tx, id); err != nil {
+		return models.Thread{}, errors.Wrapf(err,
+			"some error while voting threadID=%d, vote=%+v", id, vote)
 	}
 
 	return thread, errors.WithStack(err)
 }
 
-func (repo Repository) GetBySlug(slug string) (models.Thread, error) {
-	var thread models.Thread
+func (repo Repository) VoteBySlug(slug string, vote models.Vote) (thread models.Thread, err error) {
+	tx, err := repo.db.Begin()
+	if err != nil {
+		return models.Thread{}, errors.WithStack(err)
+	}
+	defer func() {
+		err = sqlHelpers.FinishTransaction(tx, err)
+	}()
 
-	err := repo.db.QueryRow(`
-			SELECT id,
-				   slug,
-				   forum_slug,
-				   author_nickname,
-				   title,
-				   message,
-				   votes,
-				   created
-			FROM threads
-			WHERE slug = $1`,
-		slug,
-	).Scan(
-		&thread.ID,
-		&thread.Slug,
-		&thread.Forum,
-		&thread.Author,
-		&thread.Title,
-		&thread.Message,
-		&thread.Votes,
-		&thread.Created,
+	thread, err = getBySlug(tx, slug) // get thread model for id
+	switch {
+	case err == models.ErrDoesNotExist:
+		return models.Thread{}, models.ErrDoesNotExist // thread does not exist
+	case err != nil:
+		return models.Thread{}, errors.Wrapf(err,
+			"some error while voting threadSlug=%s, vote=%+v", slug, vote)
+	}
+
+	_, err = tx.Exec(`
+			INSERT INTO votes (thread_id, author_nickname, voice)
+			VALUES ($1, $2, $3)
+			ON CONFLICT (thread_id, author_nickname) DO UPDATE SET voice = $3`,
+		thread.ID,
+		vote.Nickname,
+		vote.Voice,
 	)
 
-	if err == pgx.ErrNoRows {
-		return models.Thread{}, models.ErrDoesNotExist
+	if pgxErr := codes.ExtractErrorCode(err); pgxErr != nil {
+		switch pgxErr.Error() {
+		case codes.ErrCodeForeignKey:
+			return models.Thread{}, models.ErrDoesNotExist // author does not exist
+		default:
+			return models.Thread{}, errors.Wrapf(err,
+				"some error while voting threadSlug=%s, vote=%+v", slug, vote)
+		}
+	}
+
+	err = tx.QueryRow(
+		`SELECT votes FROM threads WHERE id = $1`, // update votes in thread
+		thread.ID,
+	).Scan(
+		&thread.Votes,
+	)
+	if err != nil {
+		return models.Thread{}, errors.Wrapf(err,
+			"some error while voting threadSlug=%s, vote=%+v", slug, vote)
 	}
 
 	return thread, errors.WithStack(err)
@@ -241,4 +271,70 @@ func (repo Repository) GetThreadsByForumSlug(forumSlug string, since *time.Time,
 	}
 
 	return threads, nil
+}
+
+func getByID(querier sqlHelpers.Querier, id int32) (models.Thread, error) {
+	var thread models.Thread
+
+	err := querier.QueryRow(`
+			SELECT id,
+				   slug,
+				   forum_slug,
+				   author_nickname,
+				   title,
+				   message,
+				   votes,
+				   created
+			FROM threads
+			WHERE id = $1`,
+		id,
+	).Scan(
+		&thread.ID,
+		&thread.Slug,
+		&thread.Forum,
+		&thread.Author,
+		&thread.Title,
+		&thread.Message,
+		&thread.Votes,
+		&thread.Created,
+	)
+
+	if err == pgx.ErrNoRows {
+		return models.Thread{}, models.ErrDoesNotExist
+	}
+
+	return thread, errors.WithStack(err)
+}
+
+func getBySlug(queryer sqlHelpers.Querier, slug string) (models.Thread, error) {
+	var thread models.Thread
+
+	err := queryer.QueryRow(`
+			SELECT id,
+				   slug,
+				   forum_slug,
+				   author_nickname,
+				   title,
+				   message,
+				   votes,
+				   created
+			FROM threads
+			WHERE slug = $1`,
+		slug,
+	).Scan(
+		&thread.ID,
+		&thread.Slug,
+		&thread.Forum,
+		&thread.Author,
+		&thread.Title,
+		&thread.Message,
+		&thread.Votes,
+		&thread.Created,
+	)
+
+	if err == pgx.ErrNoRows {
+		return models.Thread{}, models.ErrDoesNotExist
+	}
+
+	return thread, errors.WithStack(err)
 }

@@ -28,12 +28,9 @@ func NewDelivery(useCase thread.UseCase, logger logger.Logger) Delivery {
 }
 
 func (delivery Delivery) CreateThread(w http.ResponseWriter, r *http.Request) {
-	data, err := ioutil.ReadAll(r.Body)
-	switch {
-	case err == io.EOF:
-		delivery.utils.WriteResponseError(w, r, http.StatusBadRequest, "empty body")
-	case err != nil:
-		delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError, err.Error())
+	data, err := delivery.getDataFromRequest(w, r)
+	if err != nil {
+		return
 	}
 
 	var newThread models.Thread
@@ -142,12 +139,9 @@ func (delivery Delivery) GetThreadBySlugOrID(w http.ResponseWriter, r *http.Requ
 }
 
 func (delivery Delivery) UpdateThreadBySlugOrID(w http.ResponseWriter, r *http.Request) {
-	data, err := ioutil.ReadAll(r.Body)
-	switch {
-	case err == io.EOF:
-		delivery.utils.WriteResponseError(w, r, http.StatusBadRequest, "empty body")
-	case err != nil:
-		delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError, err.Error())
+	data, err := delivery.getDataFromRequest(w, r)
+	if err != nil {
+		return
 	}
 
 	var threadUpdate models.Thread
@@ -177,5 +171,55 @@ func (delivery Delivery) UpdateThreadBySlugOrID(w http.ResponseWriter, r *http.R
 		}
 
 		delivery.utils.WriteResponse(w, r, http.StatusOK, data)
+	}
+}
+
+func (delivery Delivery) VoteThreadBySlugOrID(w http.ResponseWriter, r *http.Request) {
+	data, err := delivery.getDataFromRequest(w, r)
+	if err != nil {
+		return
+	}
+
+	var vote models.Vote
+
+	if err := json.Unmarshal(data, &vote); err != nil {
+		delivery.utils.WriteResponseError(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	slugOrID := mux.Vars(r)["slug_or_id"]
+
+	updatedThread, err := delivery.useCase.VoteBySlugOrID(slugOrID, vote)
+	switch {
+	case errors.Is(err, models.ErrDoesNotExist):
+		delivery.utils.WriteResponseError(w, r, http.StatusNotFound,
+			fmt.Sprintf("thread with slug_or_id=%s or author=%s does not exits",
+				slugOrID, vote.Nickname))
+
+	case err != nil:
+		delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError,
+			fmt.Sprintf("%+v", err))
+
+	default:
+		data, err := json.Marshal(updatedThread)
+		if err != nil {
+			delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		delivery.utils.WriteResponse(w, r, http.StatusOK, data)
+	}
+}
+
+func (delivery Delivery) getDataFromRequest(w http.ResponseWriter, r *http.Request) ([]byte, error) {
+	switch data, err := ioutil.ReadAll(r.Body); err {
+	case nil:
+		return data, nil
+	case io.EOF:
+		delivery.utils.WriteResponseError(w, r, http.StatusBadRequest, "empty body")
+		return nil, err
+	default:
+		delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError, err.Error())
+		return nil, err
 	}
 }

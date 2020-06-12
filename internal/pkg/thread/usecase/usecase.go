@@ -26,6 +26,14 @@ func (useCase UseCase) GetBySlugOrID(slugOrID string) (models.Thread, error) {
 	}
 }
 
+func (useCase UseCase) VoteBySlugOrID(slugOrID string, vote models.Vote) (models.Thread, error) {
+	if id, err := strconv.Atoi(slugOrID); err != nil {
+		return useCase.repo.VoteBySlug(slugOrID, vote)
+	} else {
+		return useCase.repo.VoteByID(int32(id), vote)
+	}
+}
+
 func (useCase UseCase) Create(thread models.Thread) (models.Thread, error) {
 	return useCase.repo.Create(thread)
 }

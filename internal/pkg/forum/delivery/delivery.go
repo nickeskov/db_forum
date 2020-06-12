@@ -27,12 +27,9 @@ func NewDelivery(useCase forum.UseCase, logger logger.Logger) Delivery {
 }
 
 func (delivery Delivery) CreateForum(w http.ResponseWriter, r *http.Request) {
-	data, err := ioutil.ReadAll(r.Body)
-	switch {
-	case err == io.EOF:
-		delivery.utils.WriteResponseError(w, r, http.StatusBadRequest, "empty body")
-	case err != nil:
-		delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError, err.Error())
+	data, err := delivery.getDataFromRequest(w, r)
+	if err != nil {
+		return
 	}
 
 	var newForum models.Forum
@@ -132,5 +129,18 @@ func (delivery Delivery) GetForumUsers(w http.ResponseWriter, r *http.Request) {
 
 	default:
 		delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError, err.Error())
+	}
+}
+
+func (delivery Delivery) getDataFromRequest(w http.ResponseWriter, r *http.Request) ([]byte, error) {
+	switch data, err := ioutil.ReadAll(r.Body); err {
+	case nil:
+		return data, nil
+	case io.EOF:
+		delivery.utils.WriteResponseError(w, r, http.StatusBadRequest, "empty body")
+		return nil, err
+	default:
+		delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError, err.Error())
+		return nil, err
 	}
 }

@@ -12,6 +12,9 @@ type Repository interface {
 	UpdateByID(thread models.Thread) (models.Thread, error)
 	UpdateBySlug(thread models.Thread) (models.Thread, error)
 
+	VoteByID(id int32, vote models.Vote) (models.Thread, error)
+	VoteBySlug(slug string, vote models.Vote) (models.Thread, error)
+
 	Create(thread models.Thread) (models.Thread, error)
 	GetThreadsByForumSlug(forumSlug string, since *time.Time, desc bool, limit int32) (models.Threads, error)
 }

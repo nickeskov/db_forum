@@ -66,9 +66,9 @@ CREATE UNLOGGED TABLE IF NOT EXISTS threads
 
 CREATE UNLOGGED TABLE IF NOT EXISTS votes
 (
-    thread_id       INTEGER NOT NULL,
-    author_nickname CITEXT  NOT NULL,
-    voice           INTEGER NOT NULL,
+    thread_id       INTEGER  NOT NULL,
+    author_nickname CITEXT   NOT NULL,
+    voice           SMALLINT NOT NULL,
 
     FOREIGN KEY (thread_id) REFERENCES threads (id)
         ON DELETE CASCADE

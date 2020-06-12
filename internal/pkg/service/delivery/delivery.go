@@ -31,17 +31,13 @@ func (delivery Delivery) DropAllData(w http.ResponseWriter, r *http.Request) {
 }
 
 func (delivery Delivery) GetStatus(w http.ResponseWriter, r *http.Request) {
-	status, err := delivery.useCase.GetStatus()
-	if err != nil {
+	if status, err := delivery.useCase.GetStatus(); err != nil {
 		delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError,
 			fmt.Sprintf("%+v", err))
-	}
-
-	if data, err := json.Marshal(status); err != nil {
+	} else if data, err := json.Marshal(status); err != nil {
 		delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError,
 			fmt.Sprintf("%+v", err))
 	} else {
 		delivery.utils.WriteResponse(w, r, http.StatusOK, data)
 	}
-
 }

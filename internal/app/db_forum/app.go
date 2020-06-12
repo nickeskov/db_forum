@@ -70,10 +70,11 @@ func StartNew() {
 	router.HandleFunc("/thread/{slug_or_id}/details", threadHandlers.GetThreadBySlugOrID).Methods(http.MethodGet)
 	router.HandleFunc("/thread/{slug_or_id}/details", threadHandlers.UpdateThreadBySlugOrID).Methods(http.MethodPost)
 
+	router.HandleFunc("/thread/{slug_or_id}/vote", threadHandlers.VoteThreadBySlugOrID).Methods(http.MethodPost)
+
 	// TODO(nickeskov): implement me
-	//router.HandleFunc("/thread/{slug_or_id}/posts", nil).Methods(http.MethodGet)
-	//router.HandleFunc("/thread/{slug_or_id}/vote", nil).Methods(http.MethodPost)
 	//router.HandleFunc("/thread/{slug_or_id}/create", nil).Methods(http.MethodPost)
+	//router.HandleFunc("/thread/{slug_or_id}/posts", nil).Methods(http.MethodGet)
 
 	// TODO(nickeskov): implement me
 	//router.HandleFunc("/post/{id}/details", nil).Methods(http.MethodGet)
