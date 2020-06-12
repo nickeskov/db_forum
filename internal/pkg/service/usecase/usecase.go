@@ -1,15 +1,15 @@
 package usecase
 
 import (
-	"github.com/nickeskov/db_forum/internal/pkg/models/service"
-	"github.com/nickeskov/db_forum/internal/pkg/service/repository"
+	serviceModels "github.com/nickeskov/db_forum/internal/pkg/models/service"
+	"github.com/nickeskov/db_forum/internal/pkg/service"
 )
 
 type UseCase struct {
-	repo repository.Repository
+	repo service.Repository
 }
 
-func NewUseCase(repo repository.Repository) UseCase {
+func NewUseCase(repo service.Repository) UseCase {
 	return UseCase{
 		repo: repo,
 	}
@@ -19,6 +19,6 @@ func (useCase UseCase) DropAllData() error {
 	return useCase.repo.DropAllData()
 }
 
-func (useCase UseCase) GetStatus() (service.Status, error) {
+func (useCase UseCase) GetStatus() (serviceModels.Status, error) {
 	return useCase.repo.GetStatus()
 }

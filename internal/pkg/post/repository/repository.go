@@ -47,7 +47,7 @@ func (repo Repository) CreatePostsInThread(thread models.Thread,
 		}
 	}()
 
-	insertedPosts, err = getInsertedPosts(batchResults, len(posts))
+	insertedPosts, err = getInsertedPosts(batchResults, batch.Len())
 
 	if pgxErr := codes.ExtractPgx4ErrorCode(err); pgxErr != nil {
 		switch pgxErr.Error() {
@@ -64,21 +64,111 @@ func (repo Repository) CreatePostsInThread(thread models.Thread,
 	return insertedPosts, errors.WithStack(err)
 }
 
+func (repo Repository) GetPostByID(id int64) (models.Post, error) {
+	ctx := context.Background()
+
+	var post models.Post
+	var postParent *int64
+
+	err := repo.db.QueryRow(ctx, `
+			SELECT id,
+				   thread_id,
+				   author_nickname,
+				   forum_slug,
+				   is_edited,
+				   message,
+				   parent,
+				   created
+			FROM posts
+			WHERE id = $1`,
+		id,
+	).Scan(
+		&post.ID,
+		&post.Thread,
+		&post.Author,
+		&post.Forum,
+		&post.IsEdited,
+		&post.Message,
+		&postParent,
+		&post.Created,
+	)
+
+	if err == pgx.ErrNoRows {
+		return models.Post{}, models.ErrDoesNotExist
+	}
+
+	if postParent != nil {
+		post.Parent = *postParent
+	}
+
+	return post, errors.WithStack(err)
+}
+
+func (repo Repository) UpdatePostByID(post models.Post) (models.Post, error) {
+	ctx := context.Background()
+
+	var postParent *int64
+	var postMessage *string
+
+	if post.Message != "" {
+		postMessage = &post.Message
+	}
+
+	err := repo.db.QueryRow(ctx, `
+			UPDATE posts
+			SET message   = COALESCE($2, message),
+				is_edited = CASE
+								WHEN (is_edited = TRUE
+									OR (is_edited = FALSE AND $2 IS NOT NULL AND $2 <> message)) THEN TRUE
+								ELSE FALSE
+					END
+			WHERE id = $1
+			RETURNING id, thread_id, author_nickname, forum_slug, is_edited, message, parent, created`,
+		post.ID,
+		postMessage,
+	).Scan(
+		&post.ID,
+		&post.Thread,
+		&post.Author,
+		&post.Forum,
+		&post.IsEdited,
+		&post.Message,
+		&postParent,
+		&post.Created,
+	)
+
+	switch err {
+	case nil:
+		if postParent != nil {
+			post.Parent = *postParent
+		}
+		return post, nil
+
+	case pgx.ErrNoRows:
+		return models.Post{}, models.ErrDoesNotExist
+
+	default:
+		return models.Post{}, errors.WithStack(err)
+	}
+}
+
 func createPostsBatch(thread models.Thread, posts models.Posts) *pgx.Batch {
-	batch := &pgx.Batch{}
+	batch := new(pgx.Batch)
 
 	created := time.Now()
 
 	for _, post := range posts {
+		// TODO(nickeskov): maybe not use parent as nullable column
 		var parent *int64
 		if post.Parent != 0 {
-			parent = &post.Parent
+			parent = new(int64)
+			*parent = post.Parent
 		}
 
 		batch.Queue(`
 				INSERT INTO posts (thread_id, author_nickname, forum_slug, message, parent, created)
 				VALUES ($1, $2, $3, $4, $5, $6) 
-				RETURNING id, thread_id, author_nickname, forum_slug, is_edited, message, parent, created`,
+				RETURNING id, thread_id, author_nickname, forum_slug, is_edited, message, parent, created;`,
 			thread.ID,
 			post.Author,
 			thread.Forum,
@@ -92,10 +182,11 @@ func createPostsBatch(thread models.Thread, posts models.Posts) *pgx.Batch {
 }
 
 func getInsertedPosts(batchResults pgx.BatchResults, batchLen int) (models.Posts, error) {
-	var insertedPosts models.Posts
+	insertedPosts := make(models.Posts, batchLen)
 
 	for i := 0; i < batchLen; i++ {
-		var post models.Post
+		post := &insertedPosts[i]
+
 		var postParent *int64
 
 		err := batchResults.QueryRow().Scan(
@@ -115,8 +206,6 @@ func getInsertedPosts(batchResults pgx.BatchResults, batchLen int) (models.Posts
 		if postParent != nil {
 			post.Parent = *postParent
 		}
-
-		insertedPosts = append(insertedPosts, post)
 	}
 
 	return insertedPosts, nil

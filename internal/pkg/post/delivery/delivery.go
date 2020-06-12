@@ -10,6 +10,8 @@ import (
 	httpUtils "github.com/nickeskov/db_forum/pkg/http"
 	"github.com/nickeskov/db_forum/pkg/logger"
 	"net/http"
+	"strconv"
+	"strings"
 )
 
 type Delivery struct {
@@ -64,5 +66,89 @@ func (delivery Delivery) CreatePostsByThreadSlugOrID(w http.ResponseWriter, r *h
 		}
 
 		delivery.utils.WriteResponse(w, r, http.StatusCreated, data)
+	}
+}
+
+func (delivery Delivery) GetPostInfoByID(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(mux.Vars(r)["id"], 10, 64)
+	if err != nil {
+		delivery.utils.WriteResponseError(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	relatedQuery := r.URL.Query().Get("related")
+
+	var related []string
+	if relatedQuery != "" {
+		related = strings.Split(relatedQuery, ",")
+	}
+
+	postFullInfo, err := delivery.useCase.GetPostInfoByID(id, related)
+
+	switch {
+	case errors.Is(err, models.ErrInvalid):
+		delivery.utils.WriteResponseError(w, r, http.StatusBadRequest, err.Error())
+
+	case errors.Is(err, models.ErrDoesNotExist):
+		delivery.utils.WriteResponseError(w, r, http.StatusNotFound,
+			fmt.Sprintf("post or related does not exist in db, postID=%d, related=%+v",
+				id, related),
+		)
+
+	case err != nil:
+		delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError,
+			fmt.Sprintf("%+v", err))
+
+	default:
+		data, err := json.Marshal(postFullInfo)
+		if err != nil {
+			delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		delivery.utils.WriteResponse(w, r, http.StatusOK, data)
+	}
+}
+
+func (delivery Delivery) UpdatePostByID(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(mux.Vars(r)["id"], 10, 64)
+	if err != nil {
+		delivery.utils.WriteResponseError(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	data, err := delivery.utils.ReadAllDataFromBody(w, r)
+	if err != nil {
+		return
+	}
+
+	postUpdate := models.Post{
+		ID: id,
+	}
+	if err := json.Unmarshal(data, &postUpdate); err != nil {
+		delivery.utils.WriteResponseError(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	updatedPost, err := delivery.useCase.UpdatePostByID(postUpdate)
+
+	switch {
+	case errors.Is(err, models.ErrDoesNotExist):
+		delivery.utils.WriteResponseError(w, r, http.StatusNotFound,
+			fmt.Sprintf("post  does not exist in db, postID=%d", id),
+		)
+
+	case err != nil:
+		delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError,
+			fmt.Sprintf("%+v", err))
+
+	default:
+		data, err := json.Marshal(updatedPost)
+		if err != nil {
+			delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		delivery.utils.WriteResponse(w, r, http.StatusOK, data)
 	}
 }

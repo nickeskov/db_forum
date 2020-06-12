@@ -1,16 +1,16 @@
 package usecase
 
 import (
-	"github.com/nickeskov/db_forum/internal/pkg/forum/repository"
+	"github.com/nickeskov/db_forum/internal/pkg/forum"
 	"github.com/nickeskov/db_forum/internal/pkg/models"
 	"strconv"
 )
 
 type UseCase struct {
-	repository repository.Repository
+	repository forum.Repository
 }
 
-func NewUseCase(repository repository.Repository) UseCase {
+func NewUseCase(repository forum.Repository) UseCase {
 	return UseCase{
 		repository: repository,
 	}

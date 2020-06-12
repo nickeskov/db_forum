@@ -2,7 +2,7 @@ package repository
 
 import (
 	"context"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/nickeskov/db_forum/internal/pkg/models"
 	"github.com/nickeskov/db_forum/internal/pkg/utils/database/driver/pgx/codes"
@@ -73,12 +73,24 @@ func (repo Repository) GetBySlug(slug string) (models.Forum, error) {
 }
 
 func (repo Repository) GetForumUsersBySlug(slug, sinceNickname string, desc bool, limit int32) (models.Users, error) {
-	rows, err := repo.db.Query(context.Background(),
-		sqlGetForumUser[desc],
-		slug,
-		sinceNickname,
-		limit,
-	)
+	var err error
+	var rows pgx.Rows
+
+	if sinceNickname != "" {
+		rows, err = repo.db.Query(context.Background(),
+			sqlGetForumUserWithSince[desc],
+			slug,
+			sinceNickname,
+			limit,
+		)
+	} else {
+		rows, err = repo.db.Query(context.Background(),
+			sqlGetForumUser[desc],
+			slug,
+			limit,
+		)
+	}
+
 	if err != nil {
 		return nil, errors.Wrapf(err, "error in forum repository"+
 			"GetForumUsersBySlug with slug=%s: %v", slug, err)
@@ -86,7 +98,7 @@ func (repo Repository) GetForumUsersBySlug(slug, sinceNickname string, desc bool
 
 	defer rows.Close()
 
-	var users models.Users
+	users := make(models.Users, 0)
 	for rows.Next() {
 		var user models.User
 		err := rows.Scan(
@@ -107,9 +119,9 @@ func (repo Repository) GetForumUsersBySlug(slug, sinceNickname string, desc bool
 		var isExists bool
 		err := repo.db.QueryRow(context.Background(),
 			`	SELECT EXISTS(
-               			SELECT forum_slug
-               			FROM forums_users
-               			WHERE forum_slug = $1
+               			SELECT 1
+               			FROM forums
+               			WHERE slug = $1
            			)`,
 			slug,
 		).Scan(

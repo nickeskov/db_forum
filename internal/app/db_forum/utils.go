@@ -13,21 +13,4 @@ func ConnectToDB(dbHost, dbName, dbUser, dbPassword string, dbMaxConns int) (*pg
 	)
 
 	return pgxpool.Connect(context.Background(), connStr)
-
-	//return pgx.NewConnPool(
-	//	pgx.ConnPoolConfig{
-	//		ConnConfig: pgx.ConnConfig{
-	//			Host:           dbHost,
-	//			Port:           5432,
-	//			Database:       dbName,
-	//			User:           dbUser,
-	//			Password:       dbPassword,
-	//			TLSConfig:      nil,
-	//			UseFallbackTLS: false,
-	//		},
-	//		MaxConnections: 10,
-	//		AfterConnect:   nil,
-	//		AcquireTimeout: 0,
-	//	},
-	//)
 }

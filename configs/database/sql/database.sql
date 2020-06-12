@@ -26,8 +26,8 @@ CREATE UNLOGGED TABLE IF NOT EXISTS forums
 
 CREATE UNLOGGED TABLE IF NOT EXISTS forums_users_nicknames
 (
-    forum_slug    CITEXT NOT NULL,
-    user_nickname CITEXT NOT NULL,
+    forum_slug    CITEXT                   NOT NULL,
+    user_nickname CITEXT COLLATE ucs_basic NOT NULL,
 
     FOREIGN KEY (forum_slug) REFERENCES forums (slug)
         ON DELETE CASCADE
@@ -41,7 +41,7 @@ CREATE UNLOGGED TABLE IF NOT EXISTS forums_users_nicknames
 );
 
 CREATE VIEW forums_users AS
-SELECT fu_nicknames.forum_slug, u.nickname, u.email, u.fullname, u.about
+SELECT fu_nicknames.forum_slug, fu_nicknames.user_nickname, u.nickname, u.email, u.fullname, u.about
 FROM forums_users_nicknames AS fu_nicknames
          JOIN users AS u ON fu_nicknames.user_nickname = u.nickname;
 
@@ -81,6 +81,7 @@ CREATE UNLOGGED TABLE IF NOT EXISTS votes
     CONSTRAINT votes_pk PRIMARY KEY (thread_id, author_nickname)
 );
 
+-- TODO(nickeskov): maybe not use parent as nullable column
 CREATE UNLOGGED TABLE IF NOT EXISTS posts
 (
     id              BIGSERIAL PRIMARY KEY UNIQUE                          NOT NULL,
@@ -118,9 +119,15 @@ BEGIN
 END;
 $add_forum_user$ LANGUAGE plpgsql;
 
-CREATE TRIGGER add_new_forum_user_after_insert_in_thread
+CREATE TRIGGER add_new_forum_user_after_insert_in_threads
     AFTER INSERT
     ON threads
+    FOR EACH ROW
+EXECUTE PROCEDURE add_new_forum_user();
+
+CREATE TRIGGER add_new_forum_user_after_insert_in_posts
+    AFTER INSERT
+    ON posts
     FOR EACH ROW
 EXECUTE PROCEDURE add_new_forum_user();
 
@@ -240,26 +247,26 @@ CREATE TRIGGER add_path_to_post
     FOR EACH ROW
 EXECUTE PROCEDURE add_path_to_post();
 
--- TODO(nickeskov): may be faster do this in application code
+--
 
-CREATE OR REPLACE FUNCTION update_is_edited_in_post() RETURNS TRIGGER AS
-$update_is_edited_in_post$
-BEGIN
-    IF (OLD.is_edited = FALSE) AND (OLD.message <> NEW.message) THEN
-        NEW.is_edited = TRUE;
-    END IF;
-    RETURN NEW;
-END;
-$update_is_edited_in_post$ LANGUAGE plpgsql;
-
-
-DROP TRIGGER IF EXISTS update_is_edited_in_post ON posts CASCADE;
-
-CREATE TRIGGER update_is_edited_in_post
-    BEFORE UPDATE
-    ON posts
-    FOR EACH ROW
-EXECUTE PROCEDURE update_is_edited_in_post();
+-- CREATE OR REPLACE FUNCTION update_is_edited_in_post() RETURNS TRIGGER AS
+-- $update_is_edited_in_post$
+-- BEGIN
+--     IF (OLD.is_edited = FALSE) AND (NEW.message IS NOT NULL) AND (OLD.message <> NEW.message) THEN
+--         NEW.is_edited = TRUE;
+--     END IF;
+--     RETURN NEW;
+-- END;
+-- $update_is_edited_in_post$ LANGUAGE plpgsql;
+--
+--
+-- DROP TRIGGER IF EXISTS update_is_edited_in_post ON posts CASCADE;
+--
+-- CREATE TRIGGER update_is_edited_in_post
+--     BEFORE UPDATE
+--     ON posts
+--     FOR EACH ROW
+-- EXECUTE PROCEDURE update_is_edited_in_post();
 
 --
 

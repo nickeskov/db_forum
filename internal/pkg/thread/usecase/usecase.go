@@ -2,17 +2,17 @@ package usecase
 
 import (
 	"github.com/nickeskov/db_forum/internal/pkg/models"
-	"github.com/nickeskov/db_forum/internal/pkg/thread/repository"
+	"github.com/nickeskov/db_forum/internal/pkg/thread"
 	"github.com/nickeskov/db_forum/internal/pkg/utils"
 	"strconv"
 	"time"
 )
 
 type UseCase struct {
-	repo repository.Repository
+	repo thread.Repository
 }
 
-func NewUseCase(repo repository.Repository) UseCase {
+func NewUseCase(repo thread.Repository) UseCase {
 	return UseCase{
 		repo: repo,
 	}

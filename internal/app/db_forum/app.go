@@ -52,7 +52,7 @@ func StartNew() {
 	userUC := userUseCase.NewUseCase(userRepo)
 	forumUC := forumUseCase.NewUseCase(forumRepo)
 	threadUC := threadUseCase.NewUseCase(threadRepo)
-	postUC := postUseCase.NewUseCase(postRepo, threadRepo)
+	postUC := postUseCase.NewUseCase(postRepo, userRepo, forumRepo, threadRepo)
 	serviceUC := serviceUseCase.NewUseCase(serviceRepo)
 
 	userHandlers := userDelivery.NewDelivery(userUC, customLogger)
@@ -84,9 +84,8 @@ func StartNew() {
 	// TODO(nickeskov): implement me
 	//router.HandleFunc("/thread/{slug_or_id}/posts", nil).Methods(http.MethodGet)
 
-	// TODO(nickeskov): implement me
-	//router.HandleFunc("/post/{id}/details", nil).Methods(http.MethodGet)
-	//router.HandleFunc("/post/{id}/details", nil).Methods(http.MethodPost)
+	router.HandleFunc("/post/{id}/details", postHandlers.GetPostInfoByID).Methods(http.MethodGet)
+	router.HandleFunc("/post/{id}/details", postHandlers.UpdatePostByID).Methods(http.MethodPost)
 
 	router.HandleFunc("/service/clear", serviceHandlers.DropAllData).Methods(http.MethodPost)
 	router.HandleFunc("/service/status", serviceHandlers.GetStatus).Methods(http.MethodGet)

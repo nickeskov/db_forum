@@ -1,15 +1,15 @@
 package repository
 
-var sqlGetForumUser = map[bool]string{
-	true: ` 
+var sqlGetForumUserWithSince = map[bool]string{
+	true: `
 		SELECT nickname,
 			   email,
 			   fullname,
 			   about
 		FROM forums_users
 		WHERE forum_slug = $1
-		  AND nickname < $2
-		ORDER BY nickname DESC
+		  AND user_nickname < $2
+		ORDER BY user_nickname DESC
 		LIMIT $3`,
 
 	false: `
@@ -19,7 +19,29 @@ var sqlGetForumUser = map[bool]string{
 			   about
 		FROM forums_users
 		WHERE forum_slug = $1
-		  AND nickname > $2
-		ORDER BY nickname
+		  AND user_nickname > $2
+		ORDER BY user_nickname
 		LIMIT $3`,
+}
+
+var sqlGetForumUser = map[bool]string{
+	true: `
+		SELECT nickname,
+			   email,
+			   fullname,
+			   about
+		FROM forums_users
+		WHERE forum_slug = $1
+		ORDER BY forums_users DESC
+		LIMIT $2`,
+
+	false: `
+		SELECT nickname,
+			   email,
+			   fullname,
+			   about
+		FROM forums_users
+		WHERE forum_slug = $1
+		ORDER BY forums_users
+		LIMIT $2`,
 }

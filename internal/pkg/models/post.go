@@ -27,15 +27,15 @@ type PostUpdate struct {
 type PostUpdates []PostUpdate
 
 //easyjson:json
-type PostFull struct {
-	Author User   `json:"author,omitempty"`
-	Forum  Forum  `json:"forum,omitempty"`
-	Post   Post   `json:"post,omitempty"`
-	Thread Thread `json:"thread,omitempty"`
+type PostFullInfo struct {
+	Author *User   `json:"author,omitempty"`
+	Forum  *Forum  `json:"forum,omitempty"`
+	Post   *Post   `json:"post,omitempty"`
+	Thread *Thread `json:"thread,omitempty"`
 }
 
 //easyjson:json
-type PostsFulls []PostFull
+type PostsFulls []PostFullInfo
 
 func (post Post) Validate() error {
 	if post.Message == "" {

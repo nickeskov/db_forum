@@ -1,21 +1,28 @@
 package usecase
 
 import (
+	"github.com/nickeskov/db_forum/internal/pkg/forum"
 	"github.com/nickeskov/db_forum/internal/pkg/models"
-	"github.com/nickeskov/db_forum/internal/pkg/post/repository"
+	"github.com/nickeskov/db_forum/internal/pkg/post"
 	"github.com/nickeskov/db_forum/internal/pkg/thread"
+	"github.com/nickeskov/db_forum/internal/pkg/user"
 	"github.com/pkg/errors"
 	"strconv"
 )
 
 type UseCase struct {
-	repository repository.Repository
+	repository post.Repository
+	userRepo   user.Repository
+	forumRepo  forum.Repository
 	threadRepo thread.Repository
 }
 
-func NewUseCase(repository repository.Repository, threadRepo thread.Repository) UseCase {
+func NewUseCase(repository post.Repository,
+	userRepo user.Repository, forumRepo forum.Repository, threadRepo thread.Repository) UseCase {
 	return UseCase{
 		repository: repository,
+		userRepo:   userRepo,
+		forumRepo:  forumRepo,
 		threadRepo: threadRepo,
 	}
 }
@@ -40,4 +47,59 @@ func (useCase UseCase) CreatePostsByThreadSlugOrID(threadSlugOrID string,
 	}
 
 	return useCase.repository.CreatePostsInThread(postsThread, posts)
+}
+
+func (useCase UseCase) GetPostInfoByID(id int64,
+	related []string) (postFullInfo models.PostFullInfo, err error) {
+
+	postModel, err := useCase.repository.GetPostByID(id)
+	switch {
+	case errors.Is(err, models.ErrDoesNotExist):
+		return models.PostFullInfo{}, models.ErrDoesNotExist
+	case err != nil:
+		return models.PostFullInfo{}, errors.WithStack(err)
+	}
+
+	postFullInfo.Post = &postModel
+
+	for _, entityName := range related {
+		switch entityName {
+		case "user":
+			relatedAuthor, relatedErr := useCase.userRepo.GetByNickname(postModel.Author)
+			if relatedErr != nil {
+				err = relatedErr
+			} else {
+				postFullInfo.Author = &relatedAuthor
+			}
+		case "forum":
+			relatedForum, relatedErr := useCase.forumRepo.GetBySlug(postModel.Forum)
+			if relatedErr != nil {
+				err = relatedErr
+			} else {
+				postFullInfo.Forum = &relatedForum
+			}
+		case "thread":
+			relatedThread, relatedErr := useCase.threadRepo.GetByID(postModel.Thread)
+			if relatedErr != nil {
+				err = relatedErr
+			} else {
+				postFullInfo.Thread = &relatedThread
+			}
+		default:
+			return models.PostFullInfo{}, models.ErrInvalid
+		}
+
+		switch {
+		case errors.Is(err, models.ErrDoesNotExist):
+			return models.PostFullInfo{}, models.ErrDoesNotExist
+		case err != nil:
+			return models.PostFullInfo{}, errors.WithStack(err)
+		}
+	}
+
+	return postFullInfo, nil
+}
+
+func (useCase UseCase) UpdatePostByID(post models.Post) (models.Post, error) {
+	return useCase.repository.UpdatePostByID(post)
 }

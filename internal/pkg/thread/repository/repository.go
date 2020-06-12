@@ -26,7 +26,6 @@ func NewRepository(db *pgxpool.Pool, forumRepo forum.Repository) Repository {
 }
 
 func (repo Repository) GetByID(id int32) (models.Thread, error) {
-
 	return getByID(repo.db, id)
 }
 
@@ -154,9 +153,7 @@ func (repo Repository) Create(thread models.Thread) (models.Thread, error) {
 		switch pgxErr.Error() {
 		case codes.ErrCodeUnique:
 			return models.Thread{}, models.ErrConflict
-		case codes.ErrCodeNotNull:
-			fallthrough
-		case codes.ErrCodeForeignKey:
+		case codes.ErrCodeForeignKey, codes.ErrCodeNotNull:
 			return models.Thread{}, models.ErrBadForeign
 		default:
 			return models.Thread{}, errors.Wrapf(err,

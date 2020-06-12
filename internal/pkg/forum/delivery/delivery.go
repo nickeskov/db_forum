@@ -114,7 +114,7 @@ func (delivery Delivery) GetForumUsers(w http.ResponseWriter, r *http.Request) {
 			fmt.Sprintf("forum with slug=%s does not exist", slug))
 
 	case models.ErrInvalid:
-		delivery.utils.WriteResponseError(w, r, http.StatusBadRequest, "bad request")
+		delivery.utils.WriteResponseError(w, r, http.StatusBadRequest, models.ErrInvalid.Error())
 
 	case nil:
 		data, err := json.Marshal(users)
@@ -126,6 +126,7 @@ func (delivery Delivery) GetForumUsers(w http.ResponseWriter, r *http.Request) {
 		delivery.utils.WriteResponse(w, r, http.StatusOK, data)
 
 	default:
-		delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError, err.Error())
+		delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError,
+			fmt.Sprintf("%+v", err))
 	}
 }
