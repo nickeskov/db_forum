@@ -5,6 +5,9 @@ import (
 	forumDelivery "github.com/nickeskov/db_forum/internal/pkg/forum/delivery"
 	forumRepository "github.com/nickeskov/db_forum/internal/pkg/forum/repository"
 	forumUseCase "github.com/nickeskov/db_forum/internal/pkg/forum/usecase"
+	postDelivery "github.com/nickeskov/db_forum/internal/pkg/post/delivery"
+	postRepository "github.com/nickeskov/db_forum/internal/pkg/post/repository"
+	postUseCase "github.com/nickeskov/db_forum/internal/pkg/post/usecase"
 	serviceDelivery "github.com/nickeskov/db_forum/internal/pkg/service/delivery"
 	serviceRepository "github.com/nickeskov/db_forum/internal/pkg/service/repository"
 	serviceUseCase "github.com/nickeskov/db_forum/internal/pkg/service/usecase"
@@ -41,16 +44,19 @@ func StartNew() {
 	userRepo := userRepository.NewRepository(dbConnPool)
 	forumRepo := forumRepository.NewRepository(dbConnPool)
 	threadRepo := threadRepository.NewRepository(dbConnPool, forumRepo)
+	postRepo := postRepository.NewRepository(dbConnPool)
 	serviceRepo := serviceRepository.NewRepository(dbConnPool)
 
 	userUC := userUseCase.NewUseCase(userRepo)
 	forumUC := forumUseCase.NewUseCase(forumRepo)
 	threadUC := threadUseCase.NewUseCase(threadRepo)
+	postUC := postUseCase.NewUseCase(postRepo, threadRepo)
 	serviceUC := serviceUseCase.NewUseCase(serviceRepo)
 
 	userHandlers := userDelivery.NewDelivery(userUC, customLogger)
 	forumHandlers := forumDelivery.NewDelivery(forumUC, customLogger)
 	threadHandlers := threadDelivery.NewDelivery(threadUC, customLogger)
+	postHandlers := postDelivery.NewDelivery(postUC, customLogger)
 	serviceHandlers := serviceDelivery.NewDelivery(serviceUC, customLogger)
 
 	router := mux.NewRouter().PathPrefix("/api").Subrouter()
@@ -69,11 +75,11 @@ func StartNew() {
 
 	router.HandleFunc("/thread/{slug_or_id}/details", threadHandlers.GetThreadBySlugOrID).Methods(http.MethodGet)
 	router.HandleFunc("/thread/{slug_or_id}/details", threadHandlers.UpdateThreadBySlugOrID).Methods(http.MethodPost)
-
 	router.HandleFunc("/thread/{slug_or_id}/vote", threadHandlers.VoteThreadBySlugOrID).Methods(http.MethodPost)
 
+	router.HandleFunc("/thread/{slug_or_id}/create", postHandlers.CreatePostsByThreadSlugOrID).Methods(http.MethodPost)
+
 	// TODO(nickeskov): implement me
-	//router.HandleFunc("/thread/{slug_or_id}/create", nil).Methods(http.MethodPost)
 	//router.HandleFunc("/thread/{slug_or_id}/posts", nil).Methods(http.MethodGet)
 
 	// TODO(nickeskov): implement me

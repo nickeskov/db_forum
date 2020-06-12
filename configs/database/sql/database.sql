@@ -87,9 +87,9 @@ CREATE UNLOGGED TABLE IF NOT EXISTS posts
     thread_id       INTEGER                                               NOT NULL,
     author_nickname CITEXT                                                NOT NULL,
     forum_slug      CITEXT                                                NOT NULL,
-    parent          INTEGER                                               NOT NULL,
-    is_edited       BOOLEAN                                               NOT NULL,
+    is_edited       BOOLEAN                     DEFAULT FALSE             NOT NULL,
     message         TEXT                                                  NOT NULL,
+    parent          INTEGER,
     created         TIMESTAMP(3) WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     path            BIGINT[]                                              NOT NULL,
 
@@ -204,6 +204,65 @@ CREATE TRIGGER update_vote_after_insert_on_threads
     FOR EACH ROW
 EXECUTE PROCEDURE update_vote();
 
-VACUUM ANALYSE;
+--
+
+CREATE OR REPLACE FUNCTION add_path_to_post() RETURNS TRIGGER AS
+$add_path_to_post$
+DECLARE
+    parent_path BIGINT[];
+BEGIN
+    IF (NEW.parent IS NULL) OR (NEW.parent = 0) THEN
+        NEW.path := NEW.path || NEW.id;
+    ELSE
+        SELECT path
+        FROM posts
+        WHERE id = NEW.parent
+          AND thread_id = NEW.thread_id
+        INTO parent_path;
+
+        IF (COALESCE(ARRAY_LENGTH(parent_path, 1), 0) = 0) THEN
+            RAISE EXCEPTION
+                'parent post with id=% not exists in thread with id=%',
+                NEW.ID, NEW.thread_id;
+        END IF;
+
+        NEW.path := NEW.path || parent_path || NEW.id;
+    END IF;
+    RETURN NEW;
+END;
+$add_path_to_post$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS add_path_to_post ON posts CASCADE;
+
+CREATE TRIGGER add_path_to_post
+    BEFORE INSERT
+    ON posts
+    FOR EACH ROW
+EXECUTE PROCEDURE add_path_to_post();
+
+-- TODO(nickeskov): may be faster do this in application code
+
+CREATE OR REPLACE FUNCTION update_is_edited_in_post() RETURNS TRIGGER AS
+$update_is_edited_in_post$
+BEGIN
+    IF (OLD.is_edited = FALSE) AND (OLD.message <> NEW.message) THEN
+        NEW.is_edited = TRUE;
+    END IF;
+    RETURN NEW;
+END;
+$update_is_edited_in_post$ LANGUAGE plpgsql;
+
+
+DROP TRIGGER IF EXISTS update_is_edited_in_post ON posts CASCADE;
+
+CREATE TRIGGER update_is_edited_in_post
+    BEFORE UPDATE
+    ON posts
+    FOR EACH ROW
+EXECUTE PROCEDURE update_is_edited_in_post();
+
+--
+
+VACUUM ANALYZE;
 
 -- Indexes

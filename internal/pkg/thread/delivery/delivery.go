@@ -10,8 +10,6 @@ import (
 	"github.com/nickeskov/db_forum/internal/pkg/utils"
 	httpUtils "github.com/nickeskov/db_forum/pkg/http"
 	"github.com/nickeskov/db_forum/pkg/logger"
-	"io"
-	"io/ioutil"
 	"net/http"
 )
 
@@ -28,7 +26,7 @@ func NewDelivery(useCase thread.UseCase, logger logger.Logger) Delivery {
 }
 
 func (delivery Delivery) CreateThread(w http.ResponseWriter, r *http.Request) {
-	data, err := delivery.getDataFromRequest(w, r)
+	data, err := delivery.utils.ReadAllDataFromBody(w, r)
 	if err != nil {
 		return
 	}
@@ -139,7 +137,7 @@ func (delivery Delivery) GetThreadBySlugOrID(w http.ResponseWriter, r *http.Requ
 }
 
 func (delivery Delivery) UpdateThreadBySlugOrID(w http.ResponseWriter, r *http.Request) {
-	data, err := delivery.getDataFromRequest(w, r)
+	data, err := delivery.utils.ReadAllDataFromBody(w, r)
 	if err != nil {
 		return
 	}
@@ -175,7 +173,7 @@ func (delivery Delivery) UpdateThreadBySlugOrID(w http.ResponseWriter, r *http.R
 }
 
 func (delivery Delivery) VoteThreadBySlugOrID(w http.ResponseWriter, r *http.Request) {
-	data, err := delivery.getDataFromRequest(w, r)
+	data, err := delivery.utils.ReadAllDataFromBody(w, r)
 	if err != nil {
 		return
 	}
@@ -208,18 +206,5 @@ func (delivery Delivery) VoteThreadBySlugOrID(w http.ResponseWriter, r *http.Req
 		}
 
 		delivery.utils.WriteResponse(w, r, http.StatusOK, data)
-	}
-}
-
-func (delivery Delivery) getDataFromRequest(w http.ResponseWriter, r *http.Request) ([]byte, error) {
-	switch data, err := ioutil.ReadAll(r.Body); err {
-	case nil:
-		return data, nil
-	case io.EOF:
-		delivery.utils.WriteResponseError(w, r, http.StatusBadRequest, "empty body")
-		return nil, err
-	default:
-		delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError, err.Error())
-		return nil, err
 	}
 }

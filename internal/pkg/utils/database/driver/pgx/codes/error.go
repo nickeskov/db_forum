@@ -6,9 +6,10 @@ import (
 )
 
 var (
-	ErrCodeNotNull    = "23502"
-	ErrCodeForeignKey = "23503"
-	ErrCodeUnique     = "23505"
+	ErrCodeNotNull        = "23502"
+	ErrCodeForeignKey     = "23503"
+	ErrCodeUnique         = "23505"
+	ErrCodeRaiseException = "P0001"
 )
 
 func ExtractErrorCode(err error) error {
@@ -20,4 +21,9 @@ func ExtractErrorCode(err error) error {
 		return models.NewError(pgxErr.Code)
 	}
 	return nil
+}
+
+func ConvertToPgError(err error) (pgx.PgError, bool) {
+	pgError, ok := err.(pgx.PgError)
+	return pgError, ok
 }
