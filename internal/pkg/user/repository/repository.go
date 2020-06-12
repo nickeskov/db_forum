@@ -1,24 +1,28 @@
 package repository
 
 import (
-	"github.com/jackc/pgx"
+	"context"
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/nickeskov/db_forum/internal/pkg/models"
 	"github.com/nickeskov/db_forum/internal/pkg/utils/database/driver/pgx/codes"
 	"github.com/pkg/errors"
 )
 
 type Repository struct {
-	db *pgx.ConnPool
+	db *pgxpool.Pool
 }
 
-func NewRepository(db *pgx.ConnPool) Repository {
+func NewRepository(db *pgxpool.Pool) Repository {
 	return Repository{
 		db: db,
 	}
 }
 
 func (repo Repository) Create(user models.User) error {
-	_, err := repo.db.Exec(
+	ctx := context.Background()
+
+	_, err := repo.db.Exec(ctx,
 		`	INSERT INTO users (nickname, email, fullname, about) 
 				VALUES ($1, $2, $3, $4)`,
 		user.Nickname,
@@ -27,7 +31,7 @@ func (repo Repository) Create(user models.User) error {
 		user.About,
 	)
 
-	pgxErr := codes.ExtractErrorCode(err)
+	pgxErr := codes.ExtractPgx4ErrorCode(err)
 	if pgxErr != nil && pgxErr.Error() == codes.ErrCodeUnique {
 		return models.ErrAlreadyExist
 	}
@@ -36,7 +40,9 @@ func (repo Repository) Create(user models.User) error {
 }
 
 func (repo Repository) UpdateByNickname(user models.User) (models.User, error) {
-	err := repo.db.QueryRow(
+	ctx := context.Background()
+
+	err := repo.db.QueryRow(ctx,
 		`	UPDATE users
 				SET email=COALESCE(NULLIF($2, ''), email),
 					fullname=COALESCE(NULLIF($3, ''), fullname),
@@ -59,7 +65,7 @@ func (repo Repository) UpdateByNickname(user models.User) (models.User, error) {
 			return models.User{}, models.ErrDoesNotExist
 		}
 
-		if pgxErr := codes.ExtractErrorCode(err); pgxErr != nil {
+		if pgxErr := codes.ExtractPgx4ErrorCode(err); pgxErr != nil {
 			// TODO(nickeskov): check error code
 			return models.User{}, models.ErrConflict
 		}
@@ -69,7 +75,9 @@ func (repo Repository) UpdateByNickname(user models.User) (models.User, error) {
 }
 
 func (repo Repository) GetByNickname(nickname string) (user models.User, err error) {
-	err = repo.db.QueryRow(
+	ctx := context.Background()
+
+	err = repo.db.QueryRow(ctx,
 		`	SELECT 	nickname,
 						email,
 						fullname,
@@ -96,7 +104,9 @@ func (repo Repository) GetByNickname(nickname string) (user models.User, err err
 }
 
 func (repo Repository) GetWithSameNicknameAndEmail(nickname, email string) (users models.Users, err error) {
-	rows, err := repo.db.Query(
+	ctx := context.Background()
+
+	rows, err := repo.db.Query(ctx,
 		`	SELECT 	nickname,
 						email,
 						fullname,

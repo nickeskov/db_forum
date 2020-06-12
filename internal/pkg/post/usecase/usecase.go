@@ -23,10 +23,6 @@ func NewUseCase(repository repository.Repository, threadRepo thread.Repository) 
 func (useCase UseCase) CreatePostsByThreadSlugOrID(threadSlugOrID string,
 	posts models.Posts) (models.Posts, error) {
 
-	if len(posts) == 0 {
-		return make(models.Posts, 0), nil
-	}
-
 	var err error
 	var postsThread models.Thread
 

@@ -1,7 +1,8 @@
 package codes
 
 import (
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgconn"
+	oldPgx "github.com/jackc/pgx"
 	"github.com/nickeskov/db_forum/internal/pkg/models"
 )
 
@@ -12,9 +13,9 @@ var (
 	ErrCodeRaiseException = "P0001"
 )
 
-func ExtractErrorCode(err error) error {
+func ExtractPgx4ErrorCode(err error) error {
 	if err != nil {
-		pgxErr, ok := err.(pgx.PgError)
+		pgxErr, ok := err.(*pgconn.PgError)
 		if !ok {
 			return models.ErrInvalid
 		}
@@ -23,7 +24,23 @@ func ExtractErrorCode(err error) error {
 	return nil
 }
 
-func ConvertToPgError(err error) (pgx.PgError, bool) {
-	pgError, ok := err.(pgx.PgError)
+func ConvertToPgx4Error(err error) (*pgconn.PgError, bool) {
+	pgError, ok := err.(*pgconn.PgError)
+	return pgError, ok
+}
+
+func ExtractPgxErrorCode(err error) error {
+	if err != nil {
+		pgxErr, ok := err.(oldPgx.PgError)
+		if !ok {
+			return models.ErrInvalid
+		}
+		return models.NewError(pgxErr.Code)
+	}
+	return nil
+}
+
+func ConvertToPgxError(err error) (oldPgx.PgError, bool) {
+	pgError, ok := err.(oldPgx.PgError)
 	return pgError, ok
 }

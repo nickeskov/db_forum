@@ -1,4 +1,4 @@
-package sql
+package pgx
 
 import "github.com/jackc/pgx"
 
@@ -18,6 +18,11 @@ type ExecQueryer interface {
 
 type Beginner interface {
 	Begin() (*pgx.Tx, error)
+}
+
+type Transactioner interface {
+	Commit() error
+	Rollback() error
 }
 
 type DriverWrapper interface {

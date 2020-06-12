@@ -2,7 +2,8 @@ package repository
 
 import (
 	"context"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/nickeskov/db_forum/internal/pkg/models"
 	"github.com/nickeskov/db_forum/internal/pkg/utils/database/driver/pgx/codes"
 	"github.com/nickeskov/db_forum/pkg/sql"
@@ -11,10 +12,10 @@ import (
 )
 
 type Repository struct {
-	db *pgx.ConnPool
+	db *pgxpool.Pool
 }
 
-func NewRepository(db *pgx.ConnPool) Repository {
+func NewRepository(db *pgxpool.Pool) Repository {
 	return Repository{
 		db: db,
 	}
@@ -27,24 +28,28 @@ func (repo Repository) CreatePostsInThread(thread models.Thread,
 		return make(models.Posts, 0), nil
 	}
 
-	tx, err := repo.db.Begin()
+	ctx := context.Background()
+
+	tx, err := repo.db.Begin(ctx)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 	defer func() {
-		err = sql.FinishTransaction(tx, err)
+		err = sql.FinishPgx4Transaction(ctx, tx, err)
 	}()
 
-	batch := tx.BeginBatch()
+	batch := createPostsBatch(thread, posts)
+
+	batchResults := tx.SendBatch(ctx, batch)
 	defer func() {
-		if closeErr := batch.Close(); closeErr != nil {
+		if closeErr := batchResults.Close(); closeErr != nil {
 			err = errors.Wrap(err, closeErr.Error())
 		}
 	}()
 
-	err = sendPostsBatch(batch, thread, posts)
+	insertedPosts, err = getInsertedPosts(batchResults, len(posts))
 
-	if pgxErr := codes.ExtractErrorCode(err); pgxErr != nil {
+	if pgxErr := codes.ExtractPgx4ErrorCode(err); pgxErr != nil {
 		switch pgxErr.Error() {
 		case codes.ErrCodeForeignKey:
 			return nil, models.ErrDoesNotExist // author or thread does not exist
@@ -56,12 +61,12 @@ func (repo Repository) CreatePostsInThread(thread models.Thread,
 		}
 	}
 
-	insertedPosts, err = getInsertedPosts(batch, len(posts))
-
 	return insertedPosts, errors.WithStack(err)
 }
 
-func sendPostsBatch(batch *pgx.Batch, thread models.Thread, posts models.Posts) error {
+func createPostsBatch(thread models.Thread, posts models.Posts) *pgx.Batch {
+	batch := &pgx.Batch{}
+
 	created := time.Now()
 
 	for _, post := range posts {
@@ -71,50 +76,44 @@ func sendPostsBatch(batch *pgx.Batch, thread models.Thread, posts models.Posts) 
 		}
 
 		batch.Queue(`
-			INSERT INTO posts (thread_id, author_nickname, forum_slug, message, parent, created)
-			VALUES ($1, $2, $3, $4, $5, $6)
-			RETURNING id, thread_id, author_nickname, forum_slug, is_edited, message, parent, created`,
-			[]interface{}{
-				thread.ID,
-				post.Author,
-				thread.Forum,
-				post.Message,
-				parent,
-				created,
-			}, nil, nil,
+				INSERT INTO posts (thread_id, author_nickname, forum_slug, message, parent, created)
+				VALUES ($1, $2, $3, $4, $5, $6) 
+				RETURNING id, thread_id, author_nickname, forum_slug, is_edited, message, parent, created`,
+			thread.ID,
+			post.Author,
+			thread.Forum,
+			post.Message,
+			parent,
+			created,
 		)
 	}
 
-	err := batch.Send(context.Background(), &pgx.TxOptions{
-		IsoLevel:       pgx.ReadCommitted,
-		AccessMode:     pgx.ReadWrite,
-		DeferrableMode: pgx.NotDeferrable,
-	})
-
-	return err
+	return batch
 }
 
-func getInsertedPosts(batch *pgx.Batch, batchLen int) (models.Posts, error) {
+func getInsertedPosts(batchResults pgx.BatchResults, batchLen int) (models.Posts, error) {
 	var insertedPosts models.Posts
 
 	for i := 0; i < batchLen; i++ {
-		// TODO(nickeskov): this not work
-		row := batch.QueryRowResults()
-
 		var post models.Post
+		var postParent *int64
 
-		err := row.Scan(
+		err := batchResults.QueryRow().Scan(
 			&post.ID,
 			&post.Thread,
 			&post.Author,
 			&post.Forum,
 			&post.IsEdited,
 			&post.Message,
-			&post.Parent,
+			&postParent,
 			&post.Created,
 		)
 		if err != nil {
-			return nil, errors.WithStack(err)
+			return nil, err
+		}
+
+		if postParent != nil {
+			post.Parent = *postParent
 		}
 
 		insertedPosts = append(insertedPosts, post)

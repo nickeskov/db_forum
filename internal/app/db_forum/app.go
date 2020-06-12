@@ -34,7 +34,9 @@ func StartNew() {
 		"my_db_forum",
 		"my_db_forum",
 		"my_db_forum",
+		10,
 	)
+
 	if err != nil {
 		customLogger.Fatalln("cannot connect to postgres:", err)
 	} else {

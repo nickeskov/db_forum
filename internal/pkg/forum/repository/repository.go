@@ -1,24 +1,26 @@
 package repository
 
 import (
+	"context"
 	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/nickeskov/db_forum/internal/pkg/models"
 	"github.com/nickeskov/db_forum/internal/pkg/utils/database/driver/pgx/codes"
 	"github.com/pkg/errors"
 )
 
 type Repository struct {
-	db *pgx.ConnPool
+	db *pgxpool.Pool
 }
 
-func NewRepository(db *pgx.ConnPool) Repository {
+func NewRepository(db *pgxpool.Pool) Repository {
 	return Repository{
 		db: db,
 	}
 }
 
 func (repo Repository) Create(forum models.Forum) (models.Forum, error) {
-	err := repo.db.QueryRow(
+	err := repo.db.QueryRow(context.Background(),
 		`	INSERT INTO forums (slug, title, threads, posts, owner_nickname)
 				VALUES ($1, $2, $3, $4, (
 							SELECT nickname FROM users WHERE nickname = $5
@@ -32,7 +34,7 @@ func (repo Repository) Create(forum models.Forum) (models.Forum, error) {
 		&forum.User,
 	)
 
-	if pgxErr := codes.ExtractErrorCode(err); pgxErr != nil {
+	if pgxErr := codes.ExtractPgx4ErrorCode(err); pgxErr != nil {
 		switch pgxErr.Error() {
 		case codes.ErrCodeUnique:
 			return models.Forum{}, models.ErrConflict
@@ -46,7 +48,7 @@ func (repo Repository) Create(forum models.Forum) (models.Forum, error) {
 
 func (repo Repository) GetBySlug(slug string) (models.Forum, error) {
 	var forum models.Forum
-	err := repo.db.QueryRow(
+	err := repo.db.QueryRow(context.Background(),
 		`	SELECT slug, title, threads, posts, owner_nickname
 				FROM forums
 				WHERE slug = $1`,
@@ -71,7 +73,8 @@ func (repo Repository) GetBySlug(slug string) (models.Forum, error) {
 }
 
 func (repo Repository) GetForumUsersBySlug(slug, sinceNickname string, desc bool, limit int32) (models.Users, error) {
-	rows, err := repo.db.Query(sqlGetForumUser[desc],
+	rows, err := repo.db.Query(context.Background(),
+		sqlGetForumUser[desc],
 		slug,
 		sinceNickname,
 		limit,
@@ -102,7 +105,7 @@ func (repo Repository) GetForumUsersBySlug(slug, sinceNickname string, desc bool
 
 	if len(users) == 0 {
 		var isExists bool
-		err := repo.db.QueryRow(
+		err := repo.db.QueryRow(context.Background(),
 			`	SELECT EXISTS(
                			SELECT forum_slug
                			FROM forums_users

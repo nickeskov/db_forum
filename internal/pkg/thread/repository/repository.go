@@ -1,21 +1,24 @@
 package repository
 
 import (
-	"github.com/jackc/pgx"
+	"context"
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/nickeskov/db_forum/internal/pkg/forum"
 	"github.com/nickeskov/db_forum/internal/pkg/models"
 	"github.com/nickeskov/db_forum/internal/pkg/utils/database/driver/pgx/codes"
 	sqlHelpers "github.com/nickeskov/db_forum/pkg/sql"
+	pgx4Interfaces "github.com/nickeskov/db_forum/pkg/sql/pgx/v4"
 	"github.com/pkg/errors"
 	"time"
 )
 
 type Repository struct {
-	db        *pgx.ConnPool
+	db        *pgxpool.Pool
 	forumRepo forum.Repository
 }
 
-func NewRepository(db *pgx.ConnPool, forumRepo forum.Repository) Repository {
+func NewRepository(db *pgxpool.Pool, forumRepo forum.Repository) Repository {
 	return Repository{
 		db:        db,
 		forumRepo: forumRepo,
@@ -23,6 +26,7 @@ func NewRepository(db *pgx.ConnPool, forumRepo forum.Repository) Repository {
 }
 
 func (repo Repository) GetByID(id int32) (models.Thread, error) {
+
 	return getByID(repo.db, id)
 }
 
@@ -31,15 +35,17 @@ func (repo Repository) GetBySlug(slug string) (models.Thread, error) {
 }
 
 func (repo Repository) VoteByID(id int32, vote models.Vote) (thread models.Thread, err error) {
-	tx, err := repo.db.Begin()
+	ctx := context.Background()
+
+	tx, err := repo.db.Begin(ctx)
 	if err != nil {
 		return models.Thread{}, errors.WithStack(err)
 	}
 	defer func() {
-		err = sqlHelpers.FinishTransaction(tx, err)
+		err = sqlHelpers.FinishPgx4Transaction(ctx, tx, err)
 	}()
 
-	_, err = tx.Exec(`
+	_, err = tx.Exec(ctx, `
 			INSERT INTO votes (thread_id, author_nickname, voice)
 			VALUES ($1, $2, $3)
 			ON CONFLICT (thread_id, author_nickname) DO UPDATE SET voice = $3`,
@@ -48,7 +54,7 @@ func (repo Repository) VoteByID(id int32, vote models.Vote) (thread models.Threa
 		vote.Voice,
 	)
 
-	if pgxErr := codes.ExtractErrorCode(err); pgxErr != nil {
+	if pgxErr := codes.ExtractPgx4ErrorCode(err); pgxErr != nil {
 		switch pgxErr.Error() {
 		case codes.ErrCodeForeignKey:
 			return models.Thread{}, models.ErrDoesNotExist // author or thread does not exist
@@ -67,12 +73,14 @@ func (repo Repository) VoteByID(id int32, vote models.Vote) (thread models.Threa
 }
 
 func (repo Repository) VoteBySlug(slug string, vote models.Vote) (thread models.Thread, err error) {
-	tx, err := repo.db.Begin()
+	ctx := context.Background()
+
+	tx, err := repo.db.Begin(ctx)
 	if err != nil {
 		return models.Thread{}, errors.WithStack(err)
 	}
 	defer func() {
-		err = sqlHelpers.FinishTransaction(tx, err)
+		err = sqlHelpers.FinishPgx4Transaction(ctx, tx, err)
 	}()
 
 	thread, err = getBySlug(tx, slug) // get thread model for id
@@ -84,7 +92,7 @@ func (repo Repository) VoteBySlug(slug string, vote models.Vote) (thread models.
 			"some error while voting threadSlug=%s, vote=%+v", slug, vote)
 	}
 
-	_, err = tx.Exec(`
+	_, err = tx.Exec(ctx, `
 			INSERT INTO votes (thread_id, author_nickname, voice)
 			VALUES ($1, $2, $3)
 			ON CONFLICT (thread_id, author_nickname) DO UPDATE SET voice = $3`,
@@ -93,7 +101,7 @@ func (repo Repository) VoteBySlug(slug string, vote models.Vote) (thread models.
 		vote.Voice,
 	)
 
-	if pgxErr := codes.ExtractErrorCode(err); pgxErr != nil {
+	if pgxErr := codes.ExtractPgx4ErrorCode(err); pgxErr != nil {
 		switch pgxErr.Error() {
 		case codes.ErrCodeForeignKey:
 			return models.Thread{}, models.ErrDoesNotExist // author does not exist
@@ -103,7 +111,7 @@ func (repo Repository) VoteBySlug(slug string, vote models.Vote) (thread models.
 		}
 	}
 
-	err = tx.QueryRow(
+	err = tx.QueryRow(ctx,
 		`SELECT votes FROM threads WHERE id = $1`, // update votes in thread
 		thread.ID,
 	).Scan(
@@ -118,12 +126,14 @@ func (repo Repository) VoteBySlug(slug string, vote models.Vote) (thread models.
 }
 
 func (repo Repository) Create(thread models.Thread) (models.Thread, error) {
+	ctx := context.Background()
+
 	var threadSlug *string
 	if thread.Slug != "" {
 		threadSlug = &thread.Slug
 	}
 
-	err := repo.db.QueryRow(`
+	err := repo.db.QueryRow(ctx, `
 			INSERT INTO threads (slug, author_nickname, title, message, created, forum_slug)
 			VALUES ($1, $2, $3, $4, $5, (SELECT slug FROM forums WHERE slug = $6)) 
 			RETURNING id, author_nickname, forum_slug, created`,
@@ -140,7 +150,7 @@ func (repo Repository) Create(thread models.Thread) (models.Thread, error) {
 		&thread.Created,
 	)
 
-	if pgxErr := codes.ExtractErrorCode(err); pgxErr != nil {
+	if pgxErr := codes.ExtractPgx4ErrorCode(err); pgxErr != nil {
 		switch pgxErr.Error() {
 		case codes.ErrCodeUnique:
 			return models.Thread{}, models.ErrConflict
@@ -158,7 +168,9 @@ func (repo Repository) Create(thread models.Thread) (models.Thread, error) {
 }
 
 func (repo Repository) UpdateByID(thread models.Thread) (models.Thread, error) {
-	err := repo.db.QueryRow(`
+	ctx := context.Background()
+
+	err := repo.db.QueryRow(ctx, `
 			UPDATE threads
 			SET title   = COALESCE(NULLIF($2, ''), title),
 				message = COALESCE(NULLIF($3, ''), message)
@@ -190,7 +202,9 @@ func (repo Repository) UpdateByID(thread models.Thread) (models.Thread, error) {
 }
 
 func (repo Repository) UpdateBySlug(thread models.Thread) (models.Thread, error) {
-	err := repo.db.QueryRow(`
+	ctx := context.Background()
+
+	err := repo.db.QueryRow(ctx, `
 			UPDATE threads
 			SET title   = COALESCE(NULLIF($2, ''), title),
 				message = COALESCE(NULLIF($3, ''), message)
@@ -221,16 +235,20 @@ func (repo Repository) UpdateBySlug(thread models.Thread) (models.Thread, error)
 	return thread, nil
 }
 
-func (repo Repository) GetThreadsByForumSlug(forumSlug string, since *time.Time, desc bool, limit int32) (models.Threads, error) {
-	var rows *pgx.Rows
+func (repo Repository) GetThreadsByForumSlug(forumSlug string, since *time.Time, desc bool,
+	limit int32) (models.Threads, error) {
+
+	ctx := context.Background()
+
+	var rows pgx.Rows
 	var err error
 
 	if since != nil {
 		sqlQuery := sqlGetThreadsByForumSlugSince[desc]
-		rows, err = repo.db.Query(sqlQuery, forumSlug, *since, limit)
+		rows, err = repo.db.Query(ctx, sqlQuery, forumSlug, *since, limit)
 	} else {
 		sqlQuery := sqlGetThreadsByForumSlug[desc]
-		rows, err = repo.db.Query(sqlQuery, forumSlug, limit)
+		rows, err = repo.db.Query(ctx, sqlQuery, forumSlug, limit)
 	}
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -273,10 +291,12 @@ func (repo Repository) GetThreadsByForumSlug(forumSlug string, since *time.Time,
 	return threads, nil
 }
 
-func getByID(querier sqlHelpers.Querier, id int32) (models.Thread, error) {
+func getByID(querier pgx4Interfaces.Querier, id int32) (models.Thread, error) {
+	ctx := context.Background()
+
 	var thread models.Thread
 
-	err := querier.QueryRow(`
+	err := querier.QueryRow(ctx, `
 			SELECT id,
 				   slug,
 				   forum_slug,
@@ -306,10 +326,12 @@ func getByID(querier sqlHelpers.Querier, id int32) (models.Thread, error) {
 	return thread, errors.WithStack(err)
 }
 
-func getBySlug(queryer sqlHelpers.Querier, slug string) (models.Thread, error) {
+func getBySlug(queryer pgx4Interfaces.Querier, slug string) (models.Thread, error) {
+	ctx := context.Background()
+
 	var thread models.Thread
 
-	err := queryer.QueryRow(`
+	err := queryer.QueryRow(ctx, `
 			SELECT id,
 				   slug,
 				   forum_slug,

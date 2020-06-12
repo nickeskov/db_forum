@@ -89,7 +89,7 @@ CREATE UNLOGGED TABLE IF NOT EXISTS posts
     forum_slug      CITEXT                                                NOT NULL,
     is_edited       BOOLEAN                     DEFAULT FALSE             NOT NULL,
     message         TEXT                                                  NOT NULL,
-    parent          INTEGER,
+    parent          BIGINT,
     created         TIMESTAMP(3) WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     path            BIGINT[]                                              NOT NULL,
 
