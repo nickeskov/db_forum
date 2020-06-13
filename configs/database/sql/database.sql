@@ -270,6 +270,10 @@ EXECUTE PROCEDURE add_path_to_post();
 
 --
 
-VACUUM ANALYZE;
-
 -- Indexes
+
+CREATE INDEX IF NOT EXISTS posts_thread_id_path1_id_idx ON posts (thread_id, (path[1]), id);
+
+--
+
+VACUUM ANALYZE;

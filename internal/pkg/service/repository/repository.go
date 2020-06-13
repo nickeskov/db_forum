@@ -4,7 +4,7 @@ import (
 	"context"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/nickeskov/db_forum/internal/pkg/models/service"
-	"github.com/nickeskov/db_forum/pkg/sql"
+	pgx4Helpers "github.com/nickeskov/db_forum/pkg/sql/pgx/v4"
 	"github.com/pkg/errors"
 )
 
@@ -34,7 +34,7 @@ func (repo Repository) GetStatus() (status service.Status, err error) {
 		return service.Status{}, errors.WithStack(err)
 	}
 	defer func() {
-		err = sql.FinishPgx4Transaction(ctx, tx, err)
+		err = pgx4Helpers.FinishPgx4Transaction(ctx, tx, err)
 	}()
 
 	if err = tx.QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&status.User); err != nil {

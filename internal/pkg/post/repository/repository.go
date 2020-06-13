@@ -5,8 +5,10 @@ import (
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/nickeskov/db_forum/internal/pkg/models"
+	"github.com/nickeskov/db_forum/internal/pkg/post"
 	"github.com/nickeskov/db_forum/internal/pkg/utils/database/driver/pgx/codes"
-	"github.com/nickeskov/db_forum/pkg/sql"
+	sqlHelpers "github.com/nickeskov/db_forum/pkg/sql"
+	pgx4Helpers "github.com/nickeskov/db_forum/pkg/sql/pgx/v4"
 	"github.com/pkg/errors"
 	"time"
 )
@@ -35,7 +37,7 @@ func (repo Repository) CreatePostsInThread(thread models.Thread,
 		return nil, errors.WithStack(err)
 	}
 	defer func() {
-		err = sql.FinishPgx4Transaction(ctx, tx, err)
+		err = pgx4Helpers.FinishPgx4Transaction(ctx, tx, err)
 	}()
 
 	batch := createPostsBatch(thread, posts)
@@ -67,10 +69,9 @@ func (repo Repository) CreatePostsInThread(thread models.Thread,
 func (repo Repository) GetPostByID(id int64) (models.Post, error) {
 	ctx := context.Background()
 
-	var post models.Post
-	var postParent *int64
+	var postModel models.Post
 
-	err := repo.db.QueryRow(ctx, `
+	row := repo.db.QueryRow(ctx, `
 			SELECT id,
 				   thread_id,
 				   author_nickname,
@@ -82,39 +83,30 @@ func (repo Repository) GetPostByID(id int64) (models.Post, error) {
 			FROM posts
 			WHERE id = $1`,
 		id,
-	).Scan(
-		&post.ID,
-		&post.Thread,
-		&post.Author,
-		&post.Forum,
-		&post.IsEdited,
-		&post.Message,
-		&postParent,
-		&post.Created,
 	)
 
-	if err == pgx.ErrNoRows {
+	switch err := scanPosts(row, &postModel); err {
+	case nil:
+		return postModel, nil
+
+	case pgx.ErrNoRows:
 		return models.Post{}, models.ErrDoesNotExist
-	}
 
-	if postParent != nil {
-		post.Parent = *postParent
+	default:
+		return models.Post{}, errors.WithStack(err)
 	}
-
-	return post, errors.WithStack(err)
 }
 
 func (repo Repository) UpdatePostByID(post models.Post) (models.Post, error) {
 	ctx := context.Background()
 
-	var postParent *int64
 	var postMessage *string
 
 	if post.Message != "" {
 		postMessage = &post.Message
 	}
 
-	err := repo.db.QueryRow(ctx, `
+	row := repo.db.QueryRow(ctx, `
 			UPDATE posts
 			SET message   = COALESCE($2, message),
 				is_edited = CASE
@@ -126,22 +118,10 @@ func (repo Repository) UpdatePostByID(post models.Post) (models.Post, error) {
 			RETURNING id, thread_id, author_nickname, forum_slug, is_edited, message, parent, created`,
 		post.ID,
 		postMessage,
-	).Scan(
-		&post.ID,
-		&post.Thread,
-		&post.Author,
-		&post.Forum,
-		&post.IsEdited,
-		&post.Message,
-		&postParent,
-		&post.Created,
 	)
 
-	switch err {
+	switch err := scanPosts(row, &post); err {
 	case nil:
-		if postParent != nil {
-			post.Parent = *postParent
-		}
 		return post, nil
 
 	case pgx.ErrNoRows:
@@ -157,12 +137,12 @@ func createPostsBatch(thread models.Thread, posts models.Posts) *pgx.Batch {
 
 	created := time.Now()
 
-	for _, post := range posts {
+	for _, postModel := range posts {
 		// TODO(nickeskov): maybe not use parent as nullable column
 		var parent *int64
-		if post.Parent != 0 {
+		if postModel.Parent != 0 {
 			parent = new(int64)
-			*parent = post.Parent
+			*parent = postModel.Parent
 		}
 
 		batch.Queue(`
@@ -170,9 +150,9 @@ func createPostsBatch(thread models.Thread, posts models.Posts) *pgx.Batch {
 				VALUES ($1, $2, $3, $4, $5, $6) 
 				RETURNING id, thread_id, author_nickname, forum_slug, is_edited, message, parent, created;`,
 			thread.ID,
-			post.Author,
+			postModel.Author,
 			thread.Forum,
-			post.Message,
+			postModel.Message,
 			parent,
 			created,
 		)
@@ -185,28 +165,76 @@ func getInsertedPosts(batchResults pgx.BatchResults, batchLen int) (models.Posts
 	insertedPosts := make(models.Posts, batchLen)
 
 	for i := 0; i < batchLen; i++ {
-		post := &insertedPosts[i]
-
-		var postParent *int64
-
-		err := batchResults.QueryRow().Scan(
-			&post.ID,
-			&post.Thread,
-			&post.Author,
-			&post.Forum,
-			&post.IsEdited,
-			&post.Message,
-			&postParent,
-			&post.Created,
-		)
-		if err != nil {
+		if err := scanPosts(batchResults.QueryRow(), &insertedPosts[i]); err != nil {
 			return nil, err
-		}
-
-		if postParent != nil {
-			post.Parent = *postParent
 		}
 	}
 
 	return insertedPosts, nil
+}
+
+func (repo Repository) GetSortedPostsByThreadSlugOrID(threadID int32, sincePostID *int64,
+	sort post.PostsSortType, desc bool, limit int64) (models.Posts, error) { // err = {nil, modesl.ErrInvalid unknown}
+
+	ctx := context.Background()
+
+	var err error
+	var rows pgx.Rows
+
+	if sincePostID != nil {
+		query, ok := sqlGetSortedPostsSince[desc][sort]
+		if !ok {
+			return nil, models.ErrInvalid
+		}
+		rows, err = repo.db.Query(ctx, query, threadID, *sincePostID, limit)
+	} else {
+		query, ok := sqlGetSortedPosts[desc][sort]
+		if !ok {
+			return nil, models.ErrInvalid
+		}
+		rows, err = repo.db.Query(ctx, query, threadID, limit)
+	}
+
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	defer rows.Close()
+
+	posts := make(models.Posts, 0)
+	for rows.Next() {
+		var postModel models.Post
+
+		if err := scanPosts(rows, &postModel); err != nil {
+			return nil, errors.WithStack(err)
+		}
+
+		posts = append(posts, postModel)
+	}
+
+	return posts, nil
+}
+
+func scanPosts(scanner sqlHelpers.Scanner, postDst *models.Post) error {
+	var postParent *int64
+
+	err := scanner.Scan(
+		&postDst.ID,
+		&postDst.Thread,
+		&postDst.Author,
+		&postDst.Forum,
+		&postDst.IsEdited,
+		&postDst.Message,
+		&postParent,
+		&postDst.Created,
+	)
+	if err != nil {
+		return err
+	}
+
+	if postParent != nil {
+		postDst.Parent = *postParent
+	}
+
+	return nil
 }

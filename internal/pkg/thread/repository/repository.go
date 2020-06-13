@@ -8,7 +8,7 @@ import (
 	"github.com/nickeskov/db_forum/internal/pkg/models"
 	"github.com/nickeskov/db_forum/internal/pkg/utils/database/driver/pgx/codes"
 	sqlHelpers "github.com/nickeskov/db_forum/pkg/sql"
-	pgx4Interfaces "github.com/nickeskov/db_forum/pkg/sql/pgx/v4"
+	pgx4Helpers "github.com/nickeskov/db_forum/pkg/sql/pgx/v4"
 	"github.com/pkg/errors"
 	"time"
 )
@@ -41,7 +41,7 @@ func (repo Repository) VoteByID(id int32, vote models.Vote) (thread models.Threa
 		return models.Thread{}, errors.WithStack(err)
 	}
 	defer func() {
-		err = sqlHelpers.FinishPgx4Transaction(ctx, tx, err)
+		err = pgx4Helpers.FinishPgx4Transaction(ctx, tx, err)
 	}()
 
 	_, err = tx.Exec(ctx, `
@@ -79,7 +79,7 @@ func (repo Repository) VoteBySlug(slug string, vote models.Vote) (thread models.
 		return models.Thread{}, errors.WithStack(err)
 	}
 	defer func() {
-		err = sqlHelpers.FinishPgx4Transaction(ctx, tx, err)
+		err = pgx4Helpers.FinishPgx4Transaction(ctx, tx, err)
 	}()
 
 	thread, err = getBySlug(tx, slug) // get thread model for id
@@ -132,9 +132,11 @@ func (repo Repository) Create(thread models.Thread) (models.Thread, error) {
 		threadSlug = &thread.Slug
 	}
 
+	// TODO(nickeskov): maybe remove nickname select, because tests passing without it
 	err := repo.db.QueryRow(ctx, `
 			INSERT INTO threads (slug, author_nickname, title, message, created, forum_slug)
-			VALUES ($1, $2, $3, $4, $5, (SELECT slug FROM forums WHERE slug = $6)) 
+			VALUES ($1, (SELECT nickname FROM users WHERE nickname = $2), $3, $4, $5,
+					(SELECT slug FROM forums WHERE slug = $6))
 			RETURNING id, author_nickname, forum_slug, created`,
 		threadSlug,
 		thread.Author,
@@ -167,7 +169,7 @@ func (repo Repository) Create(thread models.Thread) (models.Thread, error) {
 func (repo Repository) UpdateByID(thread models.Thread) (models.Thread, error) {
 	ctx := context.Background()
 
-	err := repo.db.QueryRow(ctx, `
+	row := repo.db.QueryRow(ctx, `
 			UPDATE threads
 			SET title   = COALESCE(NULLIF($2, ''), title),
 				message = COALESCE(NULLIF($3, ''), message)
@@ -176,16 +178,9 @@ func (repo Repository) UpdateByID(thread models.Thread) (models.Thread, error) {
 		thread.ID,
 		thread.Title,
 		thread.Message,
-	).Scan(
-		&thread.ID,
-		&thread.Slug,
-		&thread.Forum,
-		&thread.Author,
-		&thread.Title,
-		&thread.Message,
-		&thread.Votes,
-		&thread.Created,
 	)
+
+	err := scanThread(row, &thread)
 
 	switch {
 	case err == pgx.ErrNoRows:
@@ -201,7 +196,7 @@ func (repo Repository) UpdateByID(thread models.Thread) (models.Thread, error) {
 func (repo Repository) UpdateBySlug(thread models.Thread) (models.Thread, error) {
 	ctx := context.Background()
 
-	err := repo.db.QueryRow(ctx, `
+	row := repo.db.QueryRow(ctx, `
 			UPDATE threads
 			SET title   = COALESCE(NULLIF($2, ''), title),
 				message = COALESCE(NULLIF($3, ''), message)
@@ -210,16 +205,9 @@ func (repo Repository) UpdateBySlug(thread models.Thread) (models.Thread, error)
 		thread.Slug,
 		thread.Title,
 		thread.Message,
-	).Scan(
-		&thread.ID,
-		&thread.Slug,
-		&thread.Forum,
-		&thread.Author,
-		&thread.Title,
-		&thread.Message,
-		&thread.Votes,
-		&thread.Created,
 	)
+
+	err := scanThread(row, &thread)
 
 	switch {
 	case err == pgx.ErrNoRows:
@@ -257,17 +245,7 @@ func (repo Repository) GetThreadsByForumSlug(forumSlug string, since *time.Time,
 	for rows.Next() {
 		var thread models.Thread
 
-		err = rows.Scan(
-			&thread.ID,
-			&thread.Slug,
-			&thread.Forum,
-			&thread.Author,
-			&thread.Title,
-			&thread.Message,
-			&thread.Votes,
-			&thread.Created,
-		)
-		if err != nil {
+		if err := scanThread(rows, &thread); err != nil {
 			return nil, errors.WithStack(err)
 		}
 
@@ -288,12 +266,12 @@ func (repo Repository) GetThreadsByForumSlug(forumSlug string, since *time.Time,
 	return threads, nil
 }
 
-func getByID(querier pgx4Interfaces.Querier, id int32) (models.Thread, error) {
+func getByID(querier pgx4Helpers.Querier, id int32) (models.Thread, error) {
 	ctx := context.Background()
 
 	var thread models.Thread
 
-	err := querier.QueryRow(ctx, `
+	row := querier.QueryRow(ctx, `
 			SELECT id,
 				   slug,
 				   forum_slug,
@@ -305,16 +283,9 @@ func getByID(querier pgx4Interfaces.Querier, id int32) (models.Thread, error) {
 			FROM threads
 			WHERE id = $1`,
 		id,
-	).Scan(
-		&thread.ID,
-		&thread.Slug,
-		&thread.Forum,
-		&thread.Author,
-		&thread.Title,
-		&thread.Message,
-		&thread.Votes,
-		&thread.Created,
 	)
+
+	err := scanThread(row, &thread)
 
 	if err == pgx.ErrNoRows {
 		return models.Thread{}, models.ErrDoesNotExist
@@ -323,12 +294,12 @@ func getByID(querier pgx4Interfaces.Querier, id int32) (models.Thread, error) {
 	return thread, errors.WithStack(err)
 }
 
-func getBySlug(queryer pgx4Interfaces.Querier, slug string) (models.Thread, error) {
+func getBySlug(queryer pgx4Helpers.Querier, slug string) (models.Thread, error) {
 	ctx := context.Background()
 
 	var thread models.Thread
 
-	err := queryer.QueryRow(ctx, `
+	row := queryer.QueryRow(ctx, `
 			SELECT id,
 				   slug,
 				   forum_slug,
@@ -340,20 +311,26 @@ func getBySlug(queryer pgx4Interfaces.Querier, slug string) (models.Thread, erro
 			FROM threads
 			WHERE slug = $1`,
 		slug,
-	).Scan(
-		&thread.ID,
-		&thread.Slug,
-		&thread.Forum,
-		&thread.Author,
-		&thread.Title,
-		&thread.Message,
-		&thread.Votes,
-		&thread.Created,
 	)
+
+	err := scanThread(row, &thread)
 
 	if err == pgx.ErrNoRows {
 		return models.Thread{}, models.ErrDoesNotExist
 	}
 
 	return thread, errors.WithStack(err)
+}
+
+func scanThread(scanner sqlHelpers.Scanner, threadDst *models.Thread) error {
+	return scanner.Scan(
+		&threadDst.ID,
+		&threadDst.Slug,
+		&threadDst.Forum,
+		&threadDst.Author,
+		&threadDst.Title,
+		&threadDst.Message,
+		&threadDst.Votes,
+		&threadDst.Created,
+	)
 }

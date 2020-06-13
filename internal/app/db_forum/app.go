@@ -80,9 +80,7 @@ func StartNew() {
 	router.HandleFunc("/thread/{slug_or_id}/vote", threadHandlers.VoteThreadBySlugOrID).Methods(http.MethodPost)
 
 	router.HandleFunc("/thread/{slug_or_id}/create", postHandlers.CreatePostsByThreadSlugOrID).Methods(http.MethodPost)
-
-	// TODO(nickeskov): implement me
-	//router.HandleFunc("/thread/{slug_or_id}/posts", nil).Methods(http.MethodGet)
+	router.HandleFunc("/thread/{slug_or_id}/posts", postHandlers.GetSortedPostsByThreadSlugOrID).Methods(http.MethodGet)
 
 	router.HandleFunc("/post/{id}/details", postHandlers.GetPostInfoByID).Methods(http.MethodGet)
 	router.HandleFunc("/post/{id}/details", postHandlers.UpdatePostByID).Methods(http.MethodPost)

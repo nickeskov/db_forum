@@ -14,14 +14,15 @@ const (
 )
 
 func ExtractPgx4ErrorCode(err error) error {
-	if err != nil {
-		pgxErr, ok := err.(*pgconn.PgError)
-		if !ok {
-			return models.ErrInvalid
-		}
-		return models.NewError(pgxErr.Code)
+	if err == nil {
+		return nil
 	}
-	return nil
+
+	pgxErr, ok := err.(*pgconn.PgError)
+	if !ok {
+		return models.ErrInvalid
+	}
+	return models.NewError(pgxErr.Code)
 }
 
 func ConvertToPgx4Error(err error) (*pgconn.PgError, bool) {
@@ -30,14 +31,15 @@ func ConvertToPgx4Error(err error) (*pgconn.PgError, bool) {
 }
 
 func ExtractPgxErrorCode(err error) error {
-	if err != nil {
-		pgxErr, ok := err.(oldPgx.PgError)
-		if !ok {
-			return models.ErrInvalid
-		}
-		return models.NewError(pgxErr.Code)
+	if err == nil {
+		return nil
 	}
-	return nil
+
+	pgxErr, ok := err.(oldPgx.PgError)
+	if !ok {
+		return models.ErrInvalid
+	}
+	return models.NewError(pgxErr.Code)
 }
 
 func ConvertToPgxError(err error) (oldPgx.PgError, bool) {

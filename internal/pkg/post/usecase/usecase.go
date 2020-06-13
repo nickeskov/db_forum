@@ -103,3 +103,63 @@ func (useCase UseCase) GetPostInfoByID(id int64,
 func (useCase UseCase) UpdatePostByID(post models.Post) (models.Post, error) {
 	return useCase.repository.UpdatePostByID(post)
 }
+
+func (useCase UseCase) GetSortedPostsByThreadSlugOrID(threadSlugOrID, sincePostID,
+	sort, desc, limit string) (models.Posts, error) {
+
+	if _, ok := postsAllowedSortTypes[post.PostsSortType(sort)]; !ok {
+		sort = string(post.FlatSort)
+	}
+
+	var sincePostIDIntPtr *int64
+
+	if sincePostID != "" {
+		sincePostIDIntPtr = new(int64)
+
+		sincePostIDInt, err := strconv.ParseInt(sincePostID, 10, 64)
+		if err != nil {
+			return nil, models.ErrInvalid
+		}
+
+		*sincePostIDIntPtr = sincePostIDInt
+	}
+
+	descBool, err := strconv.ParseBool(desc)
+	if err != nil {
+		return nil, models.ErrInvalid
+	}
+
+	limitInt, err := strconv.ParseInt(limit, 10, 64)
+	if err != nil {
+		return nil, models.ErrInvalid
+	}
+
+	var threadModel models.Thread
+
+	if id, convertErr := strconv.Atoi(threadSlugOrID); convertErr != nil {
+		threadModel, err = useCase.threadRepo.GetBySlug(threadSlugOrID)
+	} else {
+		threadModel, err = useCase.threadRepo.GetByID(int32(id))
+	}
+
+	switch {
+	case errors.Is(err, models.ErrDoesNotExist):
+		return nil, models.ErrDoesNotExist
+	case err != nil:
+		return nil, errors.WithStack(err)
+	}
+
+	return useCase.repository.GetSortedPostsByThreadSlugOrID(
+		threadModel.ID,
+		sincePostIDIntPtr,
+		post.PostsSortType(sort),
+		descBool,
+		limitInt,
+	)
+}
+
+var postsAllowedSortTypes = map[post.PostsSortType]bool{
+	post.FlatSort:       true,
+	post.TreeSort:       true,
+	post.ParentTreeSort: true,
+}

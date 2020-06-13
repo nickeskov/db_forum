@@ -6,6 +6,7 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/nickeskov/db_forum/internal/pkg/models"
 	"github.com/nickeskov/db_forum/internal/pkg/utils/database/driver/pgx/codes"
+	sqlHelpers "github.com/nickeskov/db_forum/pkg/sql"
 	"github.com/pkg/errors"
 )
 
@@ -42,7 +43,7 @@ func (repo Repository) Create(user models.User) error {
 func (repo Repository) UpdateByNickname(user models.User) (models.User, error) {
 	ctx := context.Background()
 
-	err := repo.db.QueryRow(ctx,
+	row := repo.db.QueryRow(ctx,
 		`	UPDATE users
 				SET email=COALESCE(NULLIF($2, ''), email),
 					fullname=COALESCE(NULLIF($3, ''), fullname),
@@ -53,31 +54,31 @@ func (repo Repository) UpdateByNickname(user models.User) (models.User, error) {
 		user.Email,
 		user.Fullname,
 		user.About,
-	).Scan(
-		&user.Nickname,
-		&user.Email,
-		&user.Fullname,
-		&user.About,
 	)
 
-	if err != nil {
+	if err := scanUser(row, &user); err != nil {
 		if err == pgx.ErrNoRows {
 			return models.User{}, models.ErrDoesNotExist
 		}
 
 		if pgxErr := codes.ExtractPgx4ErrorCode(err); pgxErr != nil {
-			// TODO(nickeskov): check error code
-			return models.User{}, models.ErrConflict
+			switch pgxErr.Error() {
+			case codes.ErrCodeUnique:
+				return models.User{}, models.ErrConflict
+			default:
+				return models.User{}, errors.Wrapf(err,
+					"some error while updating user by nickname, user=%+v", user)
+			}
 		}
 	}
 
-	return user, errors.WithStack(err)
+	return user, nil
 }
 
 func (repo Repository) GetByNickname(nickname string) (user models.User, err error) {
 	ctx := context.Background()
 
-	err = repo.db.QueryRow(ctx,
+	row := repo.db.QueryRow(ctx,
 		`	SELECT 	nickname,
 						email,
 						fullname,
@@ -85,12 +86,9 @@ func (repo Repository) GetByNickname(nickname string) (user models.User, err err
 				FROM users
 				WHERE nickname = $1`,
 		nickname,
-	).Scan(
-		&user.Nickname,
-		&user.Email,
-		&user.Fullname,
-		&user.About,
 	)
+
+	err = scanUser(row, &user)
 
 	switch {
 	case err == pgx.ErrNoRows:
@@ -125,13 +123,7 @@ func (repo Repository) GetWithSameNicknameAndEmail(nickname, email string) (user
 	for rows.Next() {
 		var user models.User
 
-		err := rows.Scan(
-			&user.Nickname,
-			&user.Email,
-			&user.Fullname,
-			&user.About,
-		)
-		if err != nil {
+		if err := scanUser(rows, &user); err != nil {
 			return nil, errors.Wrapf(err, "error in user repository "+
 				"GetWithSameNicknameAndEmail while scanning, nickname=%s, email=%s: %v",
 				nickname, email, err)
@@ -141,4 +133,14 @@ func (repo Repository) GetWithSameNicknameAndEmail(nickname, email string) (user
 	}
 
 	return users, nil
+}
+
+func scanUser(scanner sqlHelpers.Scanner, userDst *models.User) error {
+	err := scanner.Scan(
+		&userDst.Nickname,
+		&userDst.Email,
+		&userDst.Fullname,
+		&userDst.About,
+	)
+	return err
 }

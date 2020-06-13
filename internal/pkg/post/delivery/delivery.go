@@ -7,6 +7,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/nickeskov/db_forum/internal/pkg/models"
 	"github.com/nickeskov/db_forum/internal/pkg/post"
+	"github.com/nickeskov/db_forum/internal/pkg/utils"
 	httpUtils "github.com/nickeskov/db_forum/pkg/http"
 	"github.com/nickeskov/db_forum/pkg/logger"
 	"net/http"
@@ -135,7 +136,7 @@ func (delivery Delivery) UpdatePostByID(w http.ResponseWriter, r *http.Request) 
 	switch {
 	case errors.Is(err, models.ErrDoesNotExist):
 		delivery.utils.WriteResponseError(w, r, http.StatusNotFound,
-			fmt.Sprintf("post  does not exist in db, postID=%d", id),
+			fmt.Sprintf("post does not exist in db, postID=%d", id),
 		)
 
 	case err != nil:
@@ -144,6 +145,41 @@ func (delivery Delivery) UpdatePostByID(w http.ResponseWriter, r *http.Request) 
 
 	default:
 		data, err := json.Marshal(updatedPost)
+		if err != nil {
+			delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		delivery.utils.WriteResponse(w, r, http.StatusOK, data)
+	}
+}
+
+func (delivery Delivery) GetSortedPostsByThreadSlugOrID(w http.ResponseWriter, r *http.Request) {
+	threadSlugOrID := mux.Vars(r)["slug_or_id"]
+
+	queryParams := r.URL.Query()
+
+	sort := queryParams.Get("sort")
+	sinceThreadID, desc, limit := utils.ParseSinceDescLimit(queryParams)
+
+	posts, err := delivery.useCase.GetSortedPostsByThreadSlugOrID(threadSlugOrID, sinceThreadID,
+		sort, desc, limit)
+
+	switch {
+	case errors.Is(err, models.ErrInvalid):
+		delivery.utils.WriteResponseError(w, r, http.StatusBadRequest, err.Error())
+
+	case errors.Is(err, models.ErrDoesNotExist):
+		delivery.utils.WriteResponseError(w, r, http.StatusNotFound,
+			fmt.Sprintf("thread does not exist in db, threadSlugOrID=%s", threadSlugOrID),
+		)
+
+	case err != nil:
+		delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError,
+			fmt.Sprintf("%+v", err))
+
+	default:
+		data, err := json.Marshal(posts)
 		if err != nil {
 			delivery.utils.WriteResponseError(w, r, http.StatusInternalServerError, err.Error())
 			return
