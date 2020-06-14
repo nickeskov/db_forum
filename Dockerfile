@@ -15,11 +15,6 @@ MAINTAINER Nicholas Eskov
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Copy application and database.sql script
-COPY --from=build_step /app/my_db_forum /app/
-COPY --from=build_step /app/configs/database/sql/database.sql /app/database.sql
-COPY --from=build_step /app/configs/database/sql/postgresql.conf /app/postgresql.conf
-
 ENV PGVER 12
 
 RUN apt -y update && \
@@ -34,6 +29,10 @@ RUN apt -y update && apt install -y \
 
 # Run the rest of the commands as the ``postgres`` user created by the ``postgres-$PGVER`` package when it was ``apt-get installed``
 USER postgres
+
+# Copy database.sql script and postresql.conf custom config
+COPY --from=build_step /app/configs/database/sql/database.sql /app/database.sql
+COPY --from=build_step /app/configs/database/sql/postgresql.conf /app/postgresql.conf
 
 # Create a PostgreSQL role named ``my_db_forum`` with ``my_db_forum`` as the password and
 # then create a database `my_db_forum` owned by the ``my_db_forum`` role.
@@ -62,6 +61,8 @@ EXPOSE 5432
 
 # Expose server port
 EXPOSE 5000
+
+COPY --from=build_step /app/my_db_forum /app/
 
 WORKDIR /app
 

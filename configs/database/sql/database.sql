@@ -81,7 +81,6 @@ CREATE UNLOGGED TABLE IF NOT EXISTS votes
     CONSTRAINT votes_pk PRIMARY KEY (thread_id, author_nickname)
 );
 
--- TODO(nickeskov): maybe not use parent as nullable column
 CREATE UNLOGGED TABLE IF NOT EXISTS posts
 (
     id              BIGSERIAL PRIMARY KEY UNIQUE                          NOT NULL,
@@ -153,26 +152,6 @@ EXECUTE PROCEDURE increment_forum_threads();
 
 --
 
-DROP FUNCTION IF EXISTS increment_forum_posts() CASCADE;
-CREATE OR REPLACE FUNCTION increment_forum_posts() RETURNS TRIGGER AS
-$increment_forum_posts$
-BEGIN
-    UPDATE forums
-    SET posts = posts + 1
-    WHERE slug = NEW.forum_slug;
-
-    RETURN NULL;
-END;
-$increment_forum_posts$ LANGUAGE plpgsql;
-
-CREATE TRIGGER increment_forum_posts_after_insert_on_threads
-    AFTER INSERT
-    ON posts
-    FOR EACH ROW
-EXECUTE PROCEDURE increment_forum_posts();
-
---
-
 DROP FUNCTION IF EXISTS insert_vote() CASCADE;
 CREATE OR REPLACE FUNCTION insert_vote() RETURNS TRIGGER AS
 $insert_vote$
@@ -213,12 +192,32 @@ EXECUTE PROCEDURE update_vote();
 
 --
 
+DROP FUNCTION IF EXISTS increment_forum_posts() CASCADE;
+CREATE OR REPLACE FUNCTION increment_forum_posts() RETURNS TRIGGER AS
+$increment_forum_posts$
+BEGIN
+    UPDATE forums
+    SET posts = posts + 1
+    WHERE slug = NEW.forum_slug;
+
+    RETURN NEW;
+END;
+$increment_forum_posts$ LANGUAGE plpgsql;
+
+CREATE TRIGGER increment_forum_posts_after_insert_on_threads
+    BEFORE INSERT
+    ON posts
+    FOR EACH ROW
+EXECUTE PROCEDURE increment_forum_posts();
+
+--
+
 CREATE OR REPLACE FUNCTION add_path_to_post() RETURNS TRIGGER AS
 $add_path_to_post$
 DECLARE
     parent_path BIGINT[];
 BEGIN
-    IF (NEW.parent IS NULL) OR (NEW.parent = 0) THEN
+    IF NEW.parent IS NULL THEN
         NEW.path := NEW.path || NEW.id;
     ELSE
         SELECT path
@@ -248,7 +247,7 @@ CREATE TRIGGER add_path_to_post
 EXECUTE PROCEDURE add_path_to_post();
 
 --
-
+-- TODO(nickeskov): maybe use this trigger for update is edited
 -- CREATE OR REPLACE FUNCTION update_is_edited_in_post() RETURNS TRIGGER AS
 -- $update_is_edited_in_post$
 -- BEGIN
