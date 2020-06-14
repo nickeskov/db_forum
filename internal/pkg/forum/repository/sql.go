@@ -8,7 +8,7 @@ var sqlGetForumUserWithSince = map[bool]string{
 			   about
 		FROM forums_users
 		WHERE forum_slug = $1
-		  AND user_nickname < $2
+		  AND nickname < $2
 		ORDER BY user_nickname DESC
 		LIMIT $3`,
 
@@ -19,8 +19,8 @@ var sqlGetForumUserWithSince = map[bool]string{
 			   about
 		FROM forums_users
 		WHERE forum_slug = $1
-		  AND user_nickname > $2
-		ORDER BY user_nickname
+		  AND nickname > $2
+		ORDER BY nickname
 		LIMIT $3`,
 }
 
@@ -32,7 +32,7 @@ var sqlGetForumUser = map[bool]string{
 			   about
 		FROM forums_users
 		WHERE forum_slug = $1
-		ORDER BY forums_users DESC
+		ORDER BY nickname DESC
 		LIMIT $2`,
 
 	false: `
@@ -42,6 +42,6 @@ var sqlGetForumUser = map[bool]string{
 			   about
 		FROM forums_users
 		WHERE forum_slug = $1
-		ORDER BY forums_users
+		ORDER BY nickname
 		LIMIT $2`,
 }

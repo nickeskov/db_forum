@@ -5,10 +5,10 @@ CREATE EXTENSION IF NOT EXISTS CITEXT;
 
 CREATE UNLOGGED TABLE IF NOT EXISTS users
 (
-    nickname CITEXT PRIMARY KEY UNIQUE NOT NULL,
-    email    CITEXT UNIQUE             NOT NULL,
-    fullname TEXT                      NOT NULL,
-    about    TEXT                      NOT NULL
+    nickname CITEXT COLLATE ucs_basic PRIMARY KEY UNIQUE NOT NULL,
+    email    CITEXT UNIQUE                               NOT NULL,
+    fullname TEXT                                        NOT NULL,
+    about    TEXT                                        NOT NULL
 );
 
 CREATE UNLOGGED TABLE IF NOT EXISTS forums
@@ -273,10 +273,12 @@ EXECUTE PROCEDURE add_path_to_post();
 
 CREATE INDEX IF NOT EXISTS posts_thread_id_path1_id_idx ON posts (thread_id, (path[1]), id);
 
+CREATE INDEX IF NOT EXISTS posts_thread_id_path_idx ON posts (thread_id, path);
 CREATE INDEX IF NOT EXISTS posts_thread_id_id_idx ON posts (thread_id, id);
 CREATE INDEX IF NOT EXISTS posts_thread_id_parent_path_idx ON posts (thread_id, parent, path);
 CREATE INDEX IF NOT EXISTS posts_parent_id_idx ON posts (parent, id);
 CREATE INDEX IF NOT EXISTS posts_id_created_thread_id_idx ON posts (id, created, thread_id);
+CREATE INDEX IF NOT EXISTS threads_forum_slug_created_idx ON threads (forum_slug, created);
 
 CREATE UNIQUE INDEX IF NOT EXISTS posts_id_path1_idx ON posts (id, (path[1]));
 
