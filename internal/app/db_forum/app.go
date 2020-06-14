@@ -24,8 +24,10 @@ import (
 	"time"
 )
 
+const loggerKey = 1
+
 func StartNew() {
-	customLogger := logger.NewTextFormatSimpleLogger(os.Stdout)
+	customLogger := logger.NewTextFormatSimpleLogger(os.Stdout, loggerKey)
 	customLogger.Printf(">>>>>>>>>>>>%v<<<<<<<<<<<<\n", time.Now())
 
 	// TODO(nickeskov): hardcoded database credentials

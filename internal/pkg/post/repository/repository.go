@@ -148,7 +148,7 @@ func createPostsBatch(thread models.Thread, posts models.Posts) *pgx.Batch {
 		batch.Queue(`
 				INSERT INTO posts (thread_id, author_nickname, forum_slug, message, parent, created)
 				VALUES ($1, $2, $3, $4, $5, $6) 
-				RETURNING id, thread_id, author_nickname, forum_slug, is_edited, message, parent, created;`,
+				RETURNING id, thread_id, author_nickname, forum_slug, is_edited, message, parent, created`,
 			thread.ID,
 			postModel.Author,
 			thread.Forum,
