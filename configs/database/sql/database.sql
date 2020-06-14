@@ -273,6 +273,14 @@ EXECUTE PROCEDURE add_path_to_post();
 
 CREATE INDEX IF NOT EXISTS posts_thread_id_path1_id_idx ON posts (thread_id, (path[1]), id);
 
+CREATE INDEX IF NOT EXISTS posts_thread_id_id_idx ON posts (thread_id, id);
+CREATE INDEX IF NOT EXISTS posts_thread_id_parent_path_idx ON posts (thread_id, parent, path);
+CREATE INDEX IF NOT EXISTS posts_parent_id_idx ON posts (parent, id);
+CREATE INDEX IF NOT EXISTS posts_id_created_thread_id_idx ON posts (id, created, thread_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS posts_id_path1_idx ON posts (id, (path[1]));
+
 --
 
+ANALYZE;
 VACUUM ANALYZE;
